@@ -1,8 +1,56 @@
 <script setup lang="ts">
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import bashIcon from 'simple-icons/icons/gnubash.svg?raw'
+import cIcon from 'simple-icons/icons/c.svg?raw'
+import cppIcon from 'simple-icons/icons/cplusplus.svg?raw'
+import csharpIcon from 'simple-icons/icons/dotnet.svg?raw'
+import cssIcon from 'simple-icons/icons/css.svg?raw'
+import dockerIcon from 'simple-icons/icons/docker.svg?raw'
+import goIcon from 'simple-icons/icons/go.svg?raw'
+import htmlIcon from 'simple-icons/icons/html5.svg?raw'
+import javaIcon from 'simple-icons/icons/openjdk.svg?raw'
+import javascriptIcon from 'simple-icons/icons/javascript.svg?raw'
+import jsonIcon from 'simple-icons/icons/json.svg?raw'
+import kotlinIcon from 'simple-icons/icons/kotlin.svg?raw'
+import luaIcon from 'simple-icons/icons/lua.svg?raw'
+import markdownIcon from 'simple-icons/icons/markdown.svg?raw'
+import phpIcon from 'simple-icons/icons/php.svg?raw'
+import pythonIcon from 'simple-icons/icons/python.svg?raw'
+import rubyIcon from 'simple-icons/icons/ruby.svg?raw'
+import rustIcon from 'simple-icons/icons/rust.svg?raw'
+import sassIcon from 'simple-icons/icons/sass.svg?raw'
+import svelteIcon from 'simple-icons/icons/svelte.svg?raw'
+import swiftIcon from 'simple-icons/icons/swift.svg?raw'
+import typescriptIcon from 'simple-icons/icons/typescript.svg?raw'
+import hljs from 'highlight.js/lib/core'
+import bash from 'highlight.js/lib/languages/bash'
+import c from 'highlight.js/lib/languages/c'
+import cpp from 'highlight.js/lib/languages/cpp'
+import csharp from 'highlight.js/lib/languages/csharp'
+import css from 'highlight.js/lib/languages/css'
+import dockerfile from 'highlight.js/lib/languages/dockerfile'
+import go from 'highlight.js/lib/languages/go'
+import java from 'highlight.js/lib/languages/java'
+import javascript from 'highlight.js/lib/languages/javascript'
+import json from 'highlight.js/lib/languages/json'
+import kotlin from 'highlight.js/lib/languages/kotlin'
+import lua from 'highlight.js/lib/languages/lua'
+import makefile from 'highlight.js/lib/languages/makefile'
+import markdown from 'highlight.js/lib/languages/markdown'
+import php from 'highlight.js/lib/languages/php'
+import python from 'highlight.js/lib/languages/python'
+import ruby from 'highlight.js/lib/languages/ruby'
+import rust from 'highlight.js/lib/languages/rust'
+import scss from 'highlight.js/lib/languages/scss'
+import sql from 'highlight.js/lib/languages/sql'
+import swift from 'highlight.js/lib/languages/swift'
+import typescript from 'highlight.js/lib/languages/typescript'
+import xml from 'highlight.js/lib/languages/xml'
+import yaml from 'highlight.js/lib/languages/yaml'
+import 'highlight.js/styles/github.css'
 import {
-  Check, ChevronDown, ChevronRight, CircleAlert, Clock3, Code2, Copy,
+  Check, ChevronDown, ChevronRight, CircleAlert, Clock3, Code2, Copy, Eye,
   ExternalLink, FileImage, FileText, Folder,
   FolderOpen, GitFork, HardDrive, LoaderCircle, LogOut, Search,
   ShieldCheck, Star, X
@@ -47,6 +95,10 @@ type GitHubUser = {
 
 type Toast = { id: number; message: string; kind: 'success' | 'error' | 'info' }
 
+for (const [name, language] of Object.entries({ bash, c, cpp, csharp, css, dockerfile, go, java, javascript, json, kotlin, lua, makefile, markdown, php, python, ruby, rust, scss, sql, swift, typescript, xml, yaml })) {
+  hljs.registerLanguage(name, language)
+}
+
 const repositoryUrl = ref('')
 const repositoryInput = ref<HTMLInputElement | null>(null)
 const repository = shallowRef<Repository | null>(null)
@@ -57,6 +109,8 @@ const activeFile = shallowRef<ExplorerItem | null>(null)
 const previewText = ref('')
 const previewHtml = ref('')
 const previewImage = ref('')
+const websiteDocument = ref('')
+const htmlPreviewMode = ref<'website' | 'source'>('website')
 const previewError = ref('')
 const previewLoading = ref(false)
 const loadingRepository = ref(false)
@@ -120,8 +174,118 @@ const fileKind = computed(() => {
   const name = activeFile.value?.name.toLowerCase() || ''
   if (/\.(png|jpe?g|gif|webp|svg|ico|avif)$/.test(name)) return 'image'
   if (/\.(md|markdown)$/.test(name) || ['readme', 'changelog'].includes(name)) return 'markdown'
-  if (/\.(txt|log|csv|env|gitignore|ya?ml|toml|xml|json|html?|css|scss|js|jsx|ts|tsx|py|java|go|rs|sh|sql|vue|svelte)$/.test(name)) return 'code'
+  if (/\.html?$/.test(name)) return 'html'
+  if (['dockerfile', 'makefile'].includes(name)) return 'code'
+  if (/\.(txt|log|csv|env|gitignore|ya?ml|toml|xml|json|css|scss|js|jsx|mjs|cjs|ts|tsx|mts|cts|py|pyw|java|c|cc|cpp|cxx|h|hpp|hxx|cs|go|rs|sh|bash|sql|kt|swift|lua|php|rb|vue|svelte)$/.test(name)) return 'code'
   return 'binary'
+})
+
+type LanguageInfo = { label: string; mark: string; slug: string; highlight: string | null }
+
+const languageMap: Record<string, LanguageInfo> = {
+  bash: { label: 'Bash', mark: '$', slug: 'bash', highlight: 'bash' },
+  bashrc: { label: 'Bash', mark: '$', slug: 'bash', highlight: 'bash' },
+  c: { label: 'C', mark: 'C', slug: 'c', highlight: 'c' },
+  cc: { label: 'C++', mark: 'C+', slug: 'cpp', highlight: 'cpp' },
+  cjs: { label: 'JavaScript', mark: 'JS', slug: 'javascript', highlight: 'javascript' },
+  cpp: { label: 'C++', mark: 'C+', slug: 'cpp', highlight: 'cpp' },
+  cts: { label: 'TypeScript', mark: 'TS', slug: 'typescript', highlight: 'typescript' },
+  cs: { label: 'C#', mark: 'C#', slug: 'csharp', highlight: 'csharp' },
+  cxx: { label: 'C++', mark: 'C+', slug: 'cpp', highlight: 'cpp' },
+  css: { label: 'CSS', mark: '3', slug: 'css', highlight: 'css' },
+  dockerfile: { label: 'Dockerfile', mark: 'D', slug: 'docker', highlight: 'dockerfile' },
+  go: { label: 'Go', mark: 'Go', slug: 'go', highlight: 'go' },
+  h: { label: 'C', mark: 'C', slug: 'c', highlight: 'c' },
+  hpp: { label: 'C++', mark: 'C+', slug: 'cpp', highlight: 'cpp' },
+  hxx: { label: 'C++', mark: 'C+', slug: 'cpp', highlight: 'cpp' },
+  html: { label: 'HTML', mark: '5', slug: 'html', highlight: 'xml' },
+  htm: { label: 'HTML', mark: '5', slug: 'html', highlight: 'xml' },
+  java: { label: 'Java', mark: 'J', slug: 'java', highlight: 'java' },
+  js: { label: 'JavaScript', mark: 'JS', slug: 'javascript', highlight: 'javascript' },
+  jsx: { label: 'React JSX', mark: 'JS', slug: 'javascript', highlight: 'javascript' },
+  json: { label: 'JSON', mark: '{}', slug: 'json', highlight: 'json' },
+  kt: { label: 'Kotlin', mark: 'K', slug: 'kotlin', highlight: 'kotlin' },
+  lua: { label: 'Lua', mark: 'Lu', slug: 'lua', highlight: 'lua' },
+  make: { label: 'Makefile', mark: 'Mk', slug: 'makefile', highlight: 'makefile' },
+  makefile: { label: 'Makefile', mark: 'Mk', slug: 'makefile', highlight: 'makefile' },
+  md: { label: 'Markdown', mark: 'M↓', slug: 'markdown', highlight: 'markdown' },
+  mjs: { label: 'JavaScript', mark: 'JS', slug: 'javascript', highlight: 'javascript' },
+  mts: { label: 'TypeScript', mark: 'TS', slug: 'typescript', highlight: 'typescript' },
+  php: { label: 'PHP', mark: 'php', slug: 'php', highlight: 'php' },
+  py: { label: 'Python', mark: 'Py', slug: 'python', highlight: 'python' },
+  pyw: { label: 'Python', mark: 'Py', slug: 'python', highlight: 'python' },
+  readme: { label: 'Markdown', mark: 'M↓', slug: 'markdown', highlight: 'markdown' },
+  changelog: { label: 'Markdown', mark: 'M↓', slug: 'markdown', highlight: 'markdown' },
+  rb: { label: 'Ruby', mark: 'Rb', slug: 'ruby', highlight: 'ruby' },
+  rs: { label: 'Rust', mark: 'Rs', slug: 'rust', highlight: 'rust' },
+  scss: { label: 'SCSS', mark: 'S', slug: 'sass', highlight: 'scss' },
+  sh: { label: 'Shell', mark: '$', slug: 'bash', highlight: 'bash' },
+  sql: { label: 'SQL', mark: 'DB', slug: 'sql', highlight: 'sql' },
+  svg: { label: 'SVG', mark: '◇', slug: 'html', highlight: 'xml' },
+  swift: { label: 'Swift', mark: 'S', slug: 'swift', highlight: 'swift' },
+  svelte: { label: 'Svelte', mark: 'S', slug: 'vue', highlight: 'xml' },
+  ts: { label: 'TypeScript', mark: 'TS', slug: 'typescript', highlight: 'typescript' },
+  tsx: { label: 'React TSX', mark: 'TS', slug: 'typescript', highlight: 'typescript' },
+  txt: { label: 'Plain text', mark: 'TXT', slug: 'text', highlight: null },
+  xml: { label: 'XML', mark: '<>', slug: 'html', highlight: 'xml' },
+  yaml: { label: 'YAML', mark: 'Y', slug: 'yaml', highlight: 'yaml' },
+  yml: { label: 'YAML', mark: 'Y', slug: 'yaml', highlight: 'yaml' },
+  vue: { label: 'Vue', mark: 'V', slug: 'vue', highlight: 'xml' },
+}
+
+const languageInfo = computed<LanguageInfo>(() => {
+  const name = activeFile.value?.name.toLowerCase() || ''
+  const extension = name.includes('.') ? name.split('.').pop() || '' : name
+  const language = languageMap[extension] || { label: 'Plain text', mark: 'TXT', slug: 'text', highlight: null }
+  return language.highlight && !hljs.getLanguage(language.highlight)
+    ? { ...language, highlight: null }
+    : language
+})
+
+const languageIcons: Record<string, string> = {
+  bash: bashIcon,
+  c: cIcon,
+  cpp: cppIcon,
+  csharp: csharpIcon,
+  css: cssIcon,
+  docker: dockerIcon,
+  go: goIcon,
+  html: htmlIcon,
+  java: javaIcon,
+  javascript: javascriptIcon,
+  json: jsonIcon,
+  kotlin: kotlinIcon,
+  lua: luaIcon,
+  markdown: markdownIcon,
+  php: phpIcon,
+  python: pythonIcon,
+  ruby: rubyIcon,
+  rust: rustIcon,
+  sass: sassIcon,
+  svelte: svelteIcon,
+  swift: swiftIcon,
+  typescript: typescriptIcon,
+}
+
+const languageBrandColors: Record<string, string> = {
+  bash: '#4eaa25', c: '#536a8c', cpp: '#00599c', csharp: '#512bd4',
+  css: '#663399', docker: '#2496ed', go: '#00add8', html: '#e34f26',
+  java: '#ed8b00', javascript: '#d8b900', json: '#626d78', kotlin: '#7f52ff',
+  lua: '#000080', markdown: '#4b5563', php: '#777bb4', python: '#3776ab',
+  ruby: '#cc342d', rust: '#8d4a36', sass: '#cc6699', svelte: '#ff3e00',
+  swift: '#f05138', typescript: '#3178c6',
+}
+
+const languageIconSvg = computed(() => languageIcons[languageInfo.value.slug] || '')
+
+const highlightedCode = computed(() => {
+  if (!languageInfo.value.highlight) return ''
+  try {
+    const html = hljs.highlight(previewText.value, { language: languageInfo.value.highlight }).value
+    return DOMPurify.sanitize(html, { ALLOWED_TAGS: ['span'], ALLOWED_ATTR: ['class'] })
+  } catch {
+    return ''
+  }
 })
 
 function notify(message: string, kind: Toast['kind'] = 'info') {
@@ -217,39 +381,124 @@ function decodeContent(content: string) {
   return new TextDecoder().decode(bytes)
 }
 
+function rawGitHubUrl(path: string) {
+  const repo = repository.value
+  if (!repo) throw new Error('No repository is selected.')
+  const repoPath = repo.full_name.split('/').map(encodeURIComponent).join('/')
+  const branch = repo.default_branch.split('/').map(encodeURIComponent).join('/')
+  const filePath = path.split('/').filter(Boolean).map(encodeURIComponent).join('/')
+  return `https://raw.githubusercontent.com/${repoPath}/${branch}/${filePath}${path.endsWith('/') ? '/' : ''}`
+}
+
+function rawGitHubDirectoryUrl(filePath: string) {
+  const directory = filePath.split('/').slice(0, -1).join('/')
+  return rawGitHubUrl(directory ? `${directory}/` : '')
+}
+
+function githubBlobDirectoryUrl(filePath: string) {
+  const repo = repository.value
+  if (!repo) throw new Error('No repository is selected.')
+  const branch = repo.default_branch.split('/').map(encodeURIComponent).join('/')
+  const directory = filePath.split('/').slice(0, -1).filter(Boolean).map(encodeURIComponent).join('/')
+  return `https://github.com/${repo.full_name}/blob/${branch}/${directory ? `${directory}/` : ''}`
+}
+
+async function fetchPublicRawText(url: string) {
+  if (repository.value?.private) throw new Error('Private files must be loaded directly from GitHub.')
+  const target = new URL(url)
+  if (target.hostname !== 'raw.githubusercontent.com') throw new Error('The public file fallback only accepts raw GitHub URLs.')
+
+  const proxy = new URL('https://anycors.vercel.app/v2/cors')
+  proxy.searchParams.set('u', target.href)
+  const response = await fetch(proxy)
+  if (!response.ok) throw new Error(`Public file preview failed (HTTP ${response.status}).`)
+  return response.text()
+}
+
+async function fetchPreviewText(item: ExplorerItem) {
+  const repo = repository.value
+  if (!repo) throw new Error('No repository is selected.')
+  const path = item.path.split('/').map(encodeURIComponent).join('/')
+  const query = new URLSearchParams({ ref: repo.default_branch })
+  const apiPath = `/repos/${repo.full_name}/contents/${path}?${query}`
+
+  try {
+    const { data } = await githubRequest<{ content?: string; encoding?: string }>(apiPath)
+    if (data.content && data.encoding === 'base64') return decodeContent(data.content)
+
+    if (repo.private) {
+      const response = await fetch(`${apiBase}${apiPath}`, {
+        headers: { Accept: 'application/vnd.github.raw+json', Authorization: `Bearer ${token.value}` }
+      })
+      if (!response.ok) throw new Error(`GitHub could not load this file (HTTP ${response.status}).`)
+      return response.text()
+    }
+  } catch (error) {
+    if (repo.private) throw error
+  }
+
+  return fetchPublicRawText(rawGitHubUrl(item.path))
+}
+
+async function renderMarkdown(markdown: string, filePath: string) {
+  const parsed = new DOMParser().parseFromString(await marked.parse(markdown), 'text/html')
+  const rawBase = rawGitHubDirectoryUrl(filePath)
+  const blobBase = githubBlobDirectoryUrl(filePath)
+
+  parsed.querySelectorAll('img[src]').forEach(image => {
+    const src = image.getAttribute('src')
+    if (src && !/^(?:[a-z][a-z\d+.-]*:|\/\/|#)/i.test(src)) image.setAttribute('src', new URL(src, rawBase).href)
+  })
+  parsed.querySelectorAll('a[href]').forEach(link => {
+    const href = link.getAttribute('href')
+    if (href && !/^(?:[a-z][a-z\d+.-]*:|\/\/|#)/i.test(href)) link.setAttribute('href', new URL(href, blobBase).href)
+  })
+
+  return DOMPurify.sanitize(parsed.body.innerHTML)
+}
+
+function prepareWebsiteDocument(source: string, filePath: string) {
+  const parsed = new DOMParser().parseFromString(source, 'text/html')
+  parsed.querySelectorAll('base').forEach(base => base.remove())
+  const base = parsed.createElement('base')
+  base.href = rawGitHubDirectoryUrl(filePath)
+  parsed.head.prepend(base)
+  const referrer = parsed.createElement('meta')
+  referrer.name = 'referrer'
+  referrer.content = 'no-referrer'
+  parsed.head.append(referrer)
+  return `<!doctype html>${parsed.documentElement.outerHTML}`
+}
+
 async function openFile(item: ExplorerItem) {
   if (!repository.value) return
   activeFile.value = item
   previewText.value = ''
   previewHtml.value = ''
   previewImage.value = ''
+  websiteDocument.value = ''
+  htmlPreviewMode.value = 'website'
   previewError.value = ''
   previewLoading.value = true
 
   try {
-    if (item.size > 1_000_000) {
+    if (item.size > 5_000_000) {
       previewError.value = 'This file is too large to preview here. Use Download to open it.'
       return
     }
-    const path = item.path.split('/').map(encodeURIComponent).join('/')
-    const query = new URLSearchParams({ ref: repository.value.default_branch })
-    const { data } = await githubRequest<{ content?: string; encoding?: string; download_url?: string; type?: string }>(`/repos/${repository.value.full_name}/contents/${path}?${query}`)
 
     if (fileKind.value === 'image') {
+      const path = item.path.split('/').map(encodeURIComponent).join('/')
+      const query = new URLSearchParams({ ref: repository.value.default_branch })
+      const { data } = await githubRequest<{ content?: string; encoding?: string; type?: string }>(`/repos/${repository.value.full_name}/contents/${path}?${query}`)
       if (!data.content || data.encoding !== 'base64') throw new Error('GitHub did not return an image preview.')
       const extension = item.name.split('.').pop()?.toLowerCase() || 'png'
       const mime = extension === 'svg' ? 'image/svg+xml' : `image/${extension === 'jpg' ? 'jpeg' : extension}`
       previewImage.value = `data:${mime};base64,${data.content.replace(/\s/g, '')}`
-    } else if (data.content && data.encoding === 'base64') {
-      previewText.value = decodeContent(data.content)
-      if (fileKind.value === 'markdown') {
-        previewHtml.value = DOMPurify.sanitize(await marked.parse(previewText.value))
-      }
-    } else if (data.download_url && fileKind.value !== 'binary') {
-      const rawResponse = await fetch(data.download_url, { headers: token.value ? { Authorization: `Bearer ${token.value}` } : undefined })
-      if (!rawResponse.ok) throw new Error('Unable to download the file preview from GitHub.')
-      previewText.value = await rawResponse.text()
-      if (fileKind.value === 'markdown') previewHtml.value = DOMPurify.sanitize(await marked.parse(previewText.value))
+    } else if (['markdown', 'code', 'html'].includes(fileKind.value)) {
+      previewText.value = await fetchPreviewText(item)
+      if (fileKind.value === 'markdown') previewHtml.value = await renderMarkdown(previewText.value, item.path)
+      if (fileKind.value === 'html') websiteDocument.value = prepareWebsiteDocument(previewText.value, item.path)
     } else {
       previewError.value = 'GitHub cannot preview this binary file. Use Download to open it.'
     }
@@ -511,12 +760,22 @@ function copyPath(path: string) {
                 <a class="download-action" :href="`https://raw.githubusercontent.com/${repository.full_name}/${encodeURIComponent(repository.default_branch)}/${activeFile.path.split('/').map(encodeURIComponent).join('/')}`" target="_blank" rel="noreferrer">Download</a>
               </div>
             </div>
-            <div class="preview-submeta"><span>{{ formatBytes(activeFile.size) }}</span><span class="meta-separator">/</span><span>{{ fileKind }}</span><span class="meta-separator">/</span><span>{{ repository.default_branch }}</span></div>
+            <div class="preview-submeta"><span>{{ formatBytes(activeFile.size) }}</span><span class="meta-separator">/</span><span>{{ fileKind === 'code' || fileKind === 'html' ? languageInfo.label : fileKind }}</span><span class="meta-separator">/</span><span>{{ repository.default_branch }}</span></div>
+            <div v-if="fileKind === 'html'" class="html-view-controls" role="group" aria-label="HTML preview mode">
+              <button type="button" :class="{ active: htmlPreviewMode === 'website' }" @click="htmlPreviewMode = 'website'"><Eye :size="14" /> Website</button>
+              <button type="button" :class="{ active: htmlPreviewMode === 'source' }" @click="htmlPreviewMode = 'source'"><Code2 :size="14" /> Source</button>
+            </div>
+            <div v-if="fileKind === 'code' || fileKind === 'markdown' || (fileKind === 'html' && htmlPreviewMode === 'source')" class="language-banner">
+              <span v-if="languageIconSvg" class="language-icon" :style="{ color: languageBrandColors[languageInfo.slug] || '#53657f' }" aria-hidden="true" v-html="languageIconSvg" />
+              <span v-else class="language-mark">{{ languageInfo.mark }}</span>
+              <strong>{{ languageInfo.label }}</strong><span class="language-banner-hint">{{ languageInfo.highlight ? 'Syntax highlighted' : 'Plain text' }}</span>
+            </div>
             <div v-if="previewLoading" class="file-loading"><LoaderCircle class="spin" :size="23" /><span>Loading file…</span></div>
             <div v-else-if="previewError" class="preview-message"><CircleAlert :size="19" /><span>{{ previewError }}</span></div>
             <img v-else-if="previewImage" class="image-preview" :src="previewImage" :alt="activeFile.name">
             <article v-else-if="fileKind === 'markdown' && previewHtml" class="markdown-preview" v-html="previewHtml" />
-            <pre v-else-if="previewText" class="code-preview"><code>{{ previewText }}</code></pre>
+            <iframe v-else-if="fileKind === 'html' && htmlPreviewMode === 'website' && websiteDocument" class="website-preview" :srcdoc="websiteDocument" :title="`Website preview for ${activeFile.name}`" sandbox="allow-scripts allow-forms allow-popups allow-downloads allow-modals" referrerpolicy="no-referrer" />
+            <pre v-else-if="previewText" class="code-preview"><code v-if="highlightedCode" class="hljs" v-html="highlightedCode" /><code v-else>{{ previewText }}</code></pre>
             <div v-else class="preview-message"><FileText :size="19" /><span>No preview is available for this file.</span></div>
           </div>
         </template>
