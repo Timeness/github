@@ -6,6 +6,9 @@ export default defineNuxtConfig({
     strict: true,
     typeCheck: true
   },
+  nitro: {
+    preset: 'vercel'
+  },
   app: {
     head: {
       title: 'GitView | GitHub Explorer',
