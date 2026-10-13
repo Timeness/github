@@ -52,7 +52,7 @@ import 'highlight.js/styles/github.css'
 import {
   Check, ChevronDown, ChevronRight, CircleAlert, Clock3, Code2, Copy, Eye,
   ExternalLink, FileImage, FileText, Folder,
-  FolderOpen, GitFork, HardDrive, LoaderCircle, LogOut, Search,
+  FolderOpen, HardDrive, LoaderCircle, LogOut, RefreshCw, Search,
   ShieldCheck, Star, X
 } from '@lucide/vue'
 
@@ -94,6 +94,8 @@ type GitHubUser = {
 }
 
 type Toast = { id: number; message: string; kind: 'success' | 'error' | 'info' }
+type DependencyPullRequest = { number: number; title: string; html_url: string; user: { login: string } }
+type OutdatedDependency = { name: string; current: string; latest: string; manifestPath: string }
 
 for (const [name, language] of Object.entries({ bash, c, cpp, csharp, css, dockerfile, go, java, javascript, json, kotlin, lua, makefile, markdown, php, python, ruby, rust, scss, sql, swift, typescript, xml, yaml })) {
   hljs.registerLanguage(name, language)
@@ -115,12 +117,25 @@ const previewError = ref('')
 const previewLoading = ref(false)
 const loadingRepository = ref(false)
 const copyingRepository = ref(false)
-const forkUrl = ref('')
-const forkProgress = ref('')
+const selectionMode = ref(false)
+const selectedPaths = ref<string[]>([])
+const deletingFiles = ref(false)
+const configuringDependencies = ref(false)
+const loadingDependencyPullRequests = ref(false)
+const dependencyPullRequestsLoaded = ref(false)
+const dependencyPullRequests = ref<DependencyPullRequest[]>([])
+const scanningDependencies = ref(false)
+const dependencyScanComplete = ref(false)
+const outdatedDependencies = ref<OutdatedDependency[]>([])
+const createdPullRequest = shallowRef<{ title: string; url: string } | null>(null)
+const copyUrl = ref('')
+const copyLinkLabel = ref('Open your independent copy')
+const copyProgress = ref('')
 const token = ref('')
 const tokenInput = ref('')
 const user = shallowRef<GitHubUser | null>(null)
 const userRepositories = ref<Repository[]>([])
+const refreshingProfile = ref(false)
 const showAuth = ref(false)
 const showRepositoryPicker = ref(false)
 const repositorySearch = ref('')
@@ -169,6 +184,48 @@ const filteredRepositories = computed(() => {
   const query = repositorySearch.value.trim().toLowerCase()
   return userRepositories.value.filter(repo => repo.full_name.toLowerCase().includes(query))
 })
+
+const dependencyEcosystems = computed(() => {
+  const entries: Array<{ ecosystem: string; directory: string }> = []
+  const add = (ecosystem: string, filePath: string) => {
+    const parent = filePath.includes('/') ? filePath.slice(0, filePath.lastIndexOf('/')) : ''
+    const directory = parent ? `/${parent}` : '/'
+    if (!entries.some(entry => entry.ecosystem === ecosystem && entry.directory === directory)) entries.push({ ecosystem, directory })
+  }
+
+  for (const entry of tree.value) {
+    if (entry.type !== 'blob') continue
+    const path = entry.path.toLowerCase()
+    const name = path.split('/').pop() || ''
+    if (name === 'package.json') add('npm', entry.path)
+    else if (/^(requirements.*\.txt|pyproject\.toml|setup\.py)$/.test(name)) add('pip', entry.path)
+    else if (name === 'go.mod') add('gomod', entry.path)
+    else if (name === 'cargo.toml') add('cargo', entry.path)
+    else if (name === 'gemfile') add('bundler', entry.path)
+    else if (name === 'composer.json') add('composer', entry.path)
+    else if (name === 'pom.xml') add('maven', entry.path)
+    else if (/^build\.gradle(\.kts)?$/.test(name)) add('gradle', entry.path)
+    else if (/\.csproj$/.test(name)) add('nuget', entry.path)
+    else if (/^dockerfile(\..+)?$/.test(name)) add('docker', entry.path)
+    else if (/\.tf$/.test(name)) add('terraform', entry.path)
+    else if (path.startsWith('.github/workflows/') && /\.ya?ml$/.test(name)) add('github-actions', '.github/workflows/workflow.yml')
+  }
+  return entries
+})
+
+const hasDependabotConfig = computed(() => tree.value.some(entry => ['.github/dependabot.yml', '.github/dependabot.yaml'].includes(entry.path)))
+
+const dependabotConfig = computed(() => [
+  'version: 2',
+  'updates:',
+  ...dependencyEcosystems.value.flatMap(({ ecosystem, directory }) => [
+    `  - package-ecosystem: "${ecosystem}"`,
+    `    directory: "${directory}"`,
+    '    schedule:',
+    '      interval: "weekly"',
+    '    open-pull-requests-limit: 10'
+  ])
+].join('\n') + '\n')
 
 const fileKind = computed(() => {
   const name = activeFile.value?.name.toLowerCase() || ''
@@ -298,6 +355,38 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Something went wrong. Please try again.'
 }
 
+function parseVersion(value: string) {
+  const match = value.trim().match(/^[v=~^<>\s]*(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/)
+  return match ? { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]), prerelease: Boolean(match[4]) } : null
+}
+
+function versionIsNewer(candidate: string, current: string) {
+  const next = parseVersion(candidate)
+  const installed = parseVersion(current)
+  if (!next || !installed) return false
+  if (next.major !== installed.major) return next.major > installed.major
+  if (next.minor !== installed.minor) return next.minor > installed.minor
+  if (next.patch !== installed.patch) return next.patch > installed.patch
+  return installed.prerelease && !next.prerelease
+}
+
+function rangeAllowsVersion(spec: string, latest: string) {
+  const trimmed = spec.trim()
+  const installed = parseVersion(trimmed.replace(/^[~^]/, ''))
+  const candidate = parseVersion(latest)
+  if (!installed || !candidate) return false
+  if (trimmed.startsWith('^')) {
+    const ceiling = installed.major > 0
+      ? { major: installed.major + 1, minor: 0, patch: 0 }
+      : installed.minor > 0
+        ? { major: 0, minor: installed.minor + 1, patch: 0 }
+        : { major: 0, minor: 0, patch: installed.patch + 1 }
+    return candidate.major < ceiling.major || candidate.major === ceiling.major && (candidate.minor < ceiling.minor || candidate.minor === ceiling.minor && candidate.patch < ceiling.patch)
+  }
+  if (trimmed.startsWith('~')) return candidate.major === installed.major && candidate.minor === installed.minor && candidate.patch >= installed.patch
+  return false
+}
+
 async function githubRequest<T>(path: string, init: RequestInit = {}): Promise<{ data: T; response: Response }> {
   const headers = new Headers(init.headers)
   headers.set('Accept', 'application/vnd.github+json')
@@ -344,12 +433,20 @@ async function loadRepository(value = repositoryUrl.value) {
   repositoryUrl.value = `https://github.com/${parsed.owner}/${parsed.name}`
   repository.value = null
   tree.value = []
+  selectedPaths.value = []
+  selectionMode.value = false
+  dependencyPullRequests.value = []
+  dependencyPullRequestsLoaded.value = false
+  outdatedDependencies.value = []
+  dependencyScanComplete.value = false
+  createdPullRequest.value = null
   currentPath.value = ''
   activeFile.value = null
   previewText.value = ''
   previewHtml.value = ''
   previewImage.value = ''
-  forkUrl.value = ''
+  copyUrl.value = ''
+  copyLinkLabel.value = 'Open your independent copy'
 
   try {
     const { data: details } = await githubRequest<Repository>(`/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.name)}`)
@@ -532,12 +629,33 @@ async function signIn() {
 }
 
 async function loadUserRepositories() {
-  if (!token.value) return
+  if (!token.value) return false
   try {
-    const { data } = await githubRequest<Repository[]>('/user/repos?per_page=100&sort=updated')
-    userRepositories.value = data
+    const repositories: Repository[] = []
+    for (let page = 1; page <= 20; page++) {
+      const { data } = await githubRequest<Repository[]>(`/user/repos?per_page=100&sort=updated&page=${page}`)
+      repositories.push(...data)
+      if (data.length < 100) break
+    }
+    userRepositories.value = repositories
+    return true
   } catch (error) {
     notify(errorMessage(error), 'error')
+    return false
+  }
+}
+
+async function refreshGitHubProfile() {
+  if (!token.value || refreshingProfile.value) return
+  refreshingProfile.value = true
+  try {
+    const { data: account } = await githubRequest<GitHubUser>('/user')
+    user.value = account
+    if (await loadUserRepositories()) notify('GitHub profile and repositories refreshed.', 'success')
+  } catch (error) {
+    notify(errorMessage(error), 'error')
+  } finally {
+    refreshingProfile.value = false
   }
 }
 
@@ -561,48 +679,311 @@ async function copyRepository() {
   }
 
   copyingRepository.value = true
-  forkUrl.value = ''
-  forkProgress.value = 'Checking your account…'
+  copyUrl.value = ''
+  copyLinkLabel.value = 'Open your independent copy'
+  copyProgress.value = 'Checking your account…'
+  let destinationUrl = ''
   try {
     const targetPath = `/repos/${encodeURIComponent(user.value.login)}/${encodeURIComponent(repository.value.name)}`
-    const existingResponse = await fetch(`${apiBase}${targetPath}`, {
-      headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token.value}`, 'X-GitHub-Api-Version': '2022-11-28' }
-    })
-    if (existingResponse.ok) {
-      const existing = await existingResponse.json() as Repository
-      forkUrl.value = existing.html_url
+    try {
+      const { data: existing } = await githubRequest<Repository>(targetPath)
+      copyUrl.value = existing.html_url
+      copyLinkLabel.value = 'Open existing repository'
+      copyProgress.value = ''
       notify(`A repository named ${existing.name} already exists in your account.`, 'info')
+      void loadUserRepositories()
       return
-    }
-    if (existingResponse.status !== 404) {
-      const details = await existingResponse.json().catch(() => null) as { message?: string } | null
-      throw new Error(details?.message || `Could not check your GitHub account (HTTP ${existingResponse.status}).`)
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.includes('not found')) throw error
     }
 
-    forkProgress.value = 'Creating full repository copy…'
-    const { data: fork } = await githubRequest<Repository & { html_url: string }>(`/repos/${repository.value.full_name}/forks`, {
+    copyProgress.value = 'Creating an independent repository…'
+    const { data: destination } = await githubRequest<Repository>('/user/repos', {
       method: 'POST',
-      body: JSON.stringify({ name: repository.value.name, default_branch_only: false })
-    })
-    forkUrl.value = fork.html_url
-    forkProgress.value = 'Waiting for GitHub to finish…'
-
-    let ready = false
-    for (let attempt = 0; attempt < 15; attempt++) {
-      const check = await fetch(`${apiBase}/repos/${encodeURIComponent(user.value.login)}/${encodeURIComponent(repository.value.name)}`, {
-        headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token.value}`, 'X-GitHub-Api-Version': '2022-11-28' }
+      body: JSON.stringify({
+        name: repository.value.name,
+        description: repository.value.description,
+        private: repository.value.private,
+        auto_init: true,
+        default_branch: repository.value.default_branch
       })
-      if (check.ok) { ready = true; break }
-      await new Promise(resolve => window.setTimeout(resolve, 2000))
+    })
+    destinationUrl = destination.html_url
+
+    const { data: initialBranch } = await githubRequest<{ commit: { sha: string; commit: { tree: { sha: string } } } }>(`/repos/${destination.full_name}/branches/${encodeURIComponent(destination.default_branch)}`)
+
+    const sourceBlobs = tree.value.filter(entry => entry.type === 'blob')
+    const destinationEntries: Array<{ path: string; mode: string; type: 'blob'; sha: string | null }> = []
+    for (const [index, entry] of sourceBlobs.entries()) {
+      copyProgress.value = `Copying files ${index + 1} of ${sourceBlobs.length}…`
+      const { data: blob } = await githubRequest<{ content: string; encoding: string }>(`/repos/${repository.value.full_name}/git/blobs/${entry.sha}`)
+      const { data: copiedBlob } = await githubRequest<{ sha: string }>(`/repos/${destination.full_name}/git/blobs`, {
+        method: 'POST',
+        body: JSON.stringify({ content: blob.content.replace(/\s/g, ''), encoding: blob.encoding })
+      })
+      destinationEntries.push({ path: entry.path, mode: entry.mode, type: 'blob', sha: copiedBlob.sha })
     }
-    forkProgress.value = ''
-    notify(ready ? 'Repository copied with its original name and branches.' : 'GitHub accepted the copy request. It may take a little longer to finish.', 'success')
-    void loadUserRepositories()
+
+    copyProgress.value = 'Writing the copied files…'
+    if (!sourceBlobs.some(entry => entry.path.toLowerCase() === 'readme.md')) {
+      destinationEntries.push({ path: 'README.md', mode: '100644', type: 'blob', sha: null })
+    }
+    const { data: newTree } = await githubRequest<{ sha: string }>(`/repos/${destination.full_name}/git/trees`, {
+      method: 'POST',
+      body: JSON.stringify({ base_tree: initialBranch.commit.commit.tree.sha, tree: destinationEntries })
+    })
+    const { data: commit } = await githubRequest<{ sha: string }>(`/repos/${destination.full_name}/git/commits`, {
+      method: 'POST',
+      body: JSON.stringify({ message: `Copy ${repository.value.full_name}`, tree: newTree.sha, parents: [initialBranch.commit.sha] })
+    })
+    const branchRef = destination.default_branch.split('/').map(encodeURIComponent).join('/')
+    await githubRequest(`/repos/${destination.full_name}/git/refs/heads/${branchRef}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ sha: commit.sha })
+    })
+    copyUrl.value = destination.html_url
+    copyProgress.value = ''
+    notify('Independent default-branch copy created. Other branches, source history, and fork relationship were not copied.', 'success')
+    await loadUserRepositories()
   } catch (error) {
-    forkProgress.value = ''
-    notify(errorMessage(error), 'error')
+    copyProgress.value = ''
+    if (destinationUrl) {
+      copyUrl.value = destinationUrl
+      copyLinkLabel.value = 'Inspect partial repository'
+    }
+    notify(destinationUrl ? `Copy stopped: ${errorMessage(error)} Open the destination to inspect the partial copy.` : errorMessage(error), 'error')
   } finally {
     copyingRepository.value = false
+  }
+}
+
+async function createChangePullRequest(title: string, body: string, changes: Array<{ path: string; content?: string; remove?: boolean }>) {
+  const repo = repository.value
+  if (!repo || !user.value) throw new Error('Connect a GitHub account and select a repository first.')
+
+  const { data: branch } = await githubRequest<{ commit: { sha: string; commit: { tree: { sha: string } } } }>(`/repos/${repo.full_name}/branches/${encodeURIComponent(repo.default_branch)}`)
+  const branchName = `gitview/${Date.now()}`
+  await githubRequest(`/repos/${repo.full_name}/git/refs`, {
+    method: 'POST',
+    body: JSON.stringify({ ref: `refs/heads/${branchName}`, sha: branch.commit.sha })
+  })
+
+  const entries = await Promise.all(changes.map(async change => {
+    if (change.remove) return { path: change.path, mode: '100644', type: 'blob', sha: null }
+    if (change.content === undefined) throw new Error(`No content was provided for ${change.path}.`)
+    const content = btoa(unescape(encodeURIComponent(change.content)))
+    const { data: blob } = await githubRequest<{ sha: string }>(`/repos/${repo.full_name}/git/blobs`, {
+      method: 'POST',
+      body: JSON.stringify({ content, encoding: 'base64' })
+    })
+    return { path: change.path, mode: '100644', type: 'blob', sha: blob.sha }
+  }))
+  const { data: newTree } = await githubRequest<{ sha: string }>(`/repos/${repo.full_name}/git/trees`, {
+    method: 'POST',
+    body: JSON.stringify({ base_tree: branch.commit.commit.tree.sha, tree: entries })
+  })
+  const { data: commit } = await githubRequest<{ sha: string }>(`/repos/${repo.full_name}/git/commits`, {
+    method: 'POST',
+    body: JSON.stringify({ message: title, tree: newTree.sha, parents: [branch.commit.sha] })
+  })
+  const encodedBranch = branchName.split('/').map(encodeURIComponent).join('/')
+  await githubRequest(`/repos/${repo.full_name}/git/refs/heads/${encodedBranch}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ sha: commit.sha })
+  })
+  const { data: pullRequest } = await githubRequest<{ html_url: string }>(`/repos/${repo.full_name}/pulls`, {
+    method: 'POST',
+    body: JSON.stringify({ title, body, head: `${repo.owner.login}:${branchName}`, base: repo.default_branch })
+  })
+  createdPullRequest.value = { title, url: pullRequest.html_url }
+  return pullRequest.html_url
+}
+
+function toggleSelectedPath(path: string) {
+  selectedPaths.value = selectedPaths.value.includes(path)
+    ? selectedPaths.value.filter(selected => selected !== path)
+    : [...selectedPaths.value, path]
+}
+
+async function deleteSelectedPaths() {
+  const repo = repository.value
+  if (!repo || !selectedPaths.value.length) return
+  if (!user.value || !token.value) {
+    showAuth.value = true
+    notify('Connect a GitHub account to create a deletion pull request.', 'info')
+    return
+  }
+
+  const selected = [...selectedPaths.value]
+  const files = new Set<string>()
+  for (const path of selected) {
+    const isDirectory = tree.value.some(entry => entry.path === path && entry.type === 'tree')
+    if (isDirectory) {
+      for (const entry of tree.value) if (entry.type === 'blob' && entry.path.startsWith(`${path}/`)) files.add(entry.path)
+    } else if (tree.value.some(entry => entry.type === 'blob' && entry.path === path)) {
+      files.add(path)
+    }
+  }
+  if (!files.size) {
+    notify('The selection contains no files to delete.', 'error')
+    return
+  }
+  if (!window.confirm(`Create a pull request deleting ${files.size} file${files.size === 1 ? '' : 's'} from ${repo.full_name}? The changes will not be merged automatically.`)) return
+
+  deletingFiles.value = true
+  try {
+    const changes = [...files].map(path => ({ path, remove: true }))
+    await createChangePullRequest(`Delete ${files.size} selected file${files.size === 1 ? '' : 's'}`, `Bulk deletion requested in GitView. Review the file changes before merging.\n\nDeleted files: ${files.size}`, changes)
+    selectedPaths.value = []
+    selectionMode.value = false
+    activeFile.value = null
+    notify('Deletion pull request created for review.', 'success')
+  } catch (error) {
+    notify(errorMessage(error), 'error')
+  } finally {
+    deletingFiles.value = false
+  }
+}
+
+async function enableDependencyUpdates() {
+  const repo = repository.value
+  if (!repo) return
+  if (!user.value || !token.value) {
+    showAuth.value = true
+    notify('Connect a GitHub account to enable dependency updates.', 'info')
+    return
+  }
+  if (!dependencyEcosystems.value.length) {
+    notify('No supported dependency manifests were found in this repository.', 'error')
+    return
+  }
+  if (tree.value.some(entry => entry.path === '.github/dependabot.yml')) {
+    notify('This repository already has a Dependabot configuration.', 'info')
+    return
+  }
+
+  configuringDependencies.value = true
+  try {
+    await createChangePullRequest(
+      'Enable scheduled dependency updates',
+      'Add a Dependabot configuration for the dependency manifests detected in this repository. Merge this pull request to enable weekly dependency update pull requests.',
+      [{ path: '.github/dependabot.yml', content: dependabotConfig.value }]
+    )
+    notify('Dependabot configuration pull request created.', 'success')
+  } catch (error) {
+    notify(errorMessage(error), 'error')
+  } finally {
+    configuringDependencies.value = false
+  }
+}
+
+async function loadDependencyPullRequests() {
+  const repo = repository.value
+  if (!repo) return
+  if (!token.value) {
+    showAuth.value = true
+    notify('Connect a GitHub account to check dependency pull requests.', 'info')
+    return
+  }
+  loadingDependencyPullRequests.value = true
+  try {
+    const { data } = await githubRequest<DependencyPullRequest[]>(`/repos/${repo.full_name}/pulls?state=open&per_page=100`)
+    dependencyPullRequests.value = data.filter(pull => pull.user.login.toLowerCase().includes('dependabot'))
+    dependencyPullRequestsLoaded.value = true
+  } catch (error) {
+    notify(errorMessage(error), 'error')
+  } finally {
+    loadingDependencyPullRequests.value = false
+  }
+}
+
+async function readRepositoryJson(path: string) {
+  const repo = repository.value
+  if (!repo) throw new Error('No repository is selected.')
+  const encodedPath = path.split('/').map(encodeURIComponent).join('/')
+  const query = new URLSearchParams({ ref: repo.default_branch })
+  const { data } = await githubRequest<{ content?: string; encoding?: string }>(`/repos/${repo.full_name}/contents/${encodedPath}?${query}`)
+  if (!data.content || data.encoding !== 'base64') throw new Error(`Could not read ${path}.`)
+  return JSON.parse(decodeContent(data.content)) as Record<string, unknown>
+}
+
+async function checkOutdatedDependencies() {
+  const repo = repository.value
+  if (!repo) return
+  const manifests = tree.value.filter(entry => entry.type === 'blob' && entry.path.split('/').pop() === 'package.json')
+  if (!manifests.length) {
+    notify('No npm package.json manifests were found.', 'info')
+    outdatedDependencies.value = []
+    dependencyScanComplete.value = true
+    return
+  }
+
+  scanningDependencies.value = true
+  dependencyScanComplete.value = false
+  outdatedDependencies.value = []
+  try {
+    const candidates: Array<{ name: string; spec: string; manifestPath: string; lockPath?: string }> = []
+    const candidateKeys = new Set<string>()
+    for (const manifest of manifests) {
+      const packageData = await readRepositoryJson(manifest.path)
+      const directory = manifest.path.includes('/') ? manifest.path.slice(0, manifest.path.lastIndexOf('/') + 1) : ''
+      const localLock = `${directory}package-lock.json`
+      const rootLock = 'package-lock.json'
+      const lockPath = tree.value.some(entry => entry.type === 'blob' && entry.path === localLock)
+        ? localLock
+        : tree.value.some(entry => entry.type === 'blob' && entry.path === rootLock) ? rootLock : undefined
+      for (const section of ['dependencies', 'devDependencies', 'optionalDependencies']) {
+        const dependencies = packageData[section]
+        if (!dependencies || typeof dependencies !== 'object') continue
+        for (const [name, spec] of Object.entries(dependencies)) {
+          const key = `${manifest.path}:${name}`
+          if (typeof spec === 'string' && /^[~^]?v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(spec.trim()) && !candidateKeys.has(key)) {
+            candidateKeys.add(key)
+            candidates.push({ name, spec, manifestPath: manifest.path, lockPath })
+          }
+        }
+      }
+    }
+
+    const lockCache = new Map<string, Promise<Record<string, unknown>>>()
+    const found: OutdatedDependency[] = []
+    for (let start = 0; start < candidates.length; start += 8) {
+      const batch = candidates.slice(start, start + 8)
+      await Promise.all(batch.map(async candidate => {
+        try {
+          let current = candidate.spec
+          let hasLockedVersion = false
+          if (candidate.lockPath) {
+            let lockRequest = lockCache.get(candidate.lockPath)
+            if (!lockRequest) {
+              lockRequest = readRepositoryJson(candidate.lockPath)
+              lockCache.set(candidate.lockPath, lockRequest)
+            }
+            const lock = await lockRequest
+            const packages = lock.packages as Record<string, { version?: string }> | undefined
+            const locked = packages?.[`node_modules/${candidate.name}`]?.version
+            if (locked) {
+              current = locked
+              hasLockedVersion = true
+            }
+          }
+          const registryUrl = `https://registry.npmjs.org/${encodeURIComponent(candidate.name)}/latest`
+          const response = await fetch(registryUrl, { headers: { Accept: 'application/vnd.npm.install-v1+json' } })
+          if (!response.ok) return
+          const latest = (await response.json() as { version?: string }).version
+          if (latest && versionIsNewer(latest, current) && (hasLockedVersion || !rangeAllowsVersion(candidate.spec, latest))) {
+            found.push({ name: candidate.name, current, latest, manifestPath: candidate.manifestPath })
+          }
+        } catch {}
+      }))
+    }
+    outdatedDependencies.value = found.sort((left, right) => left.name.localeCompare(right.name))
+    dependencyScanComplete.value = true
+    notify(`Checked npm dependencies. ${found.length} outdated package${found.length === 1 ? '' : 's'} found.`, 'success')
+  } catch (error) {
+    notify(errorMessage(error), 'error')
+  } finally {
+    scanningDependencies.value = false
   }
 }
 
@@ -650,6 +1031,9 @@ function copyPath(path: string) {
         <button v-if="user" class="account-chip" type="button" @click="showRepositoryPicker = true" :title="`Signed in as ${user.login}`">
           <img :src="user.avatar_url" :alt="`${user.login} avatar`"><span>{{ user.login }}</span><ChevronDown :size="14" />
         </button>
+        <button v-if="user" class="icon-button" type="button" title="Refresh GitHub profile and repositories" aria-label="Refresh GitHub profile and repositories" :disabled="refreshingProfile" @click="refreshGitHubProfile">
+          <RefreshCw :size="15" :class="{ spin: refreshingProfile }" />
+        </button>
         <button v-if="user" class="icon-button" type="button" title="Sign out" aria-label="Sign out" @click="signOut"><LogOut :size="16" /></button>
         <button v-else class="sign-in-button" type="button" @click="showAuth = true"><GitHubMark :size="15" /> Sign in</button>
       </div>
@@ -674,7 +1058,11 @@ function copyPath(path: string) {
           </div>
         </div>
         <div class="tree-title-row">
-          <span>FILES</span><span class="tree-count">{{ visibleItems.length }}</span>
+          <span>FILES</span>
+          <span class="tree-title-actions">
+            <span class="tree-count">{{ visibleItems.length }}</span>
+            <button class="manage-files-button" type="button" @click="selectionMode = !selectionMode; selectedPaths = []">{{ selectionMode ? 'Cancel' : 'Select' }}</button>
+          </span>
         </div>
         <label class="tree-search"><Search :size="14" /><input v-model="filterText" placeholder="Filter this folder" aria-label="Filter files"></label>
         <nav class="breadcrumbs" aria-label="Repository path">
@@ -684,13 +1072,20 @@ function copyPath(path: string) {
             <button type="button" :class="{ active: crumb.path === currentPath }" @click="openFolder(crumb.path)">{{ crumb.label }}</button>
           </template>
         </nav>
+        <div v-if="selectionMode" class="bulk-toolbar">
+          <span>{{ selectedPaths.length }} selected</span>
+          <button type="button" :disabled="!selectedPaths.length || deletingFiles" @click="deleteSelectedPaths">{{ deletingFiles ? 'Preparing PR…' : 'Create delete PR' }}</button>
+        </div>
         <div class="file-tree">
-          <button v-for="item in visibleItems" :key="item.path" class="file-row" :class="{ selected: activeFile?.path === item.path }" type="button" @click="item.type === 'dir' ? openFolder(item.path) : openFile(item)">
-            <component :is="item.type === 'dir' ? Folder : fileIcon(item)" :size="15" :stroke-width="1.8" :class="item.type === 'dir' ? 'folder-icon' : 'file-icon'" />
-            <span class="file-name" :title="item.name">{{ item.name }}</span>
-            <span v-if="item.type === 'file'" class="file-size">{{ formatBytes(item.size) }}</span>
-            <ChevronRight v-else :size="13" class="folder-chevron" />
-          </button>
+          <div v-for="item in visibleItems" :key="item.path" class="file-entry-row">
+            <input v-if="selectionMode" class="file-selection-checkbox" type="checkbox" :checked="selectedPaths.includes(item.path)" :aria-label="`Select ${item.path} for deletion`" @change="toggleSelectedPath(item.path)">
+            <button class="file-row" :class="{ selected: activeFile?.path === item.path || selectedPaths.includes(item.path) }" type="button" @click="item.type === 'dir' ? openFolder(item.path) : openFile(item)">
+              <component :is="item.type === 'dir' ? Folder : fileIcon(item)" :size="15" :stroke-width="1.8" :class="item.type === 'dir' ? 'folder-icon' : 'file-icon'" />
+              <span class="file-name" :title="item.name">{{ item.name }}</span>
+              <span v-if="item.type === 'file'" class="file-size">{{ formatBytes(item.size) }}</span>
+              <ChevronRight v-else :size="13" class="folder-chevron" />
+            </button>
+          </div>
           <div v-if="!visibleItems.length" class="tree-empty"><FolderOpen :size="20" /><span>{{ filterText ? 'No matching files' : 'This folder is empty' }}</span></div>
         </div>
         <footer class="sidebar-footer"><span class="status-dot" />{{ rateLimit }}</footer>
@@ -699,9 +1094,9 @@ function copyPath(path: string) {
       <section class="preview-area">
         <div v-if="!repository && !loadingRepository" class="welcome-view">
           <div class="welcome-copy">
-            <div class="eyebrow"><span class="eyebrow-line" /> GITHUB REPOSITORY EXPLORER</div>
+            <div class="eyebrow"><span class="eyebrow-line" /> GITHUB REPOSITORY TOOLS</div>
             <h1>See the whole<br><span>repository.</span></h1>
-            <p>Browse every folder, inspect files, and make a complete copy to your GitHub account without leaving this workspace.</p>
+            <p>Browse repositories, inspect files, and create an independent copy in your GitHub account.</p>
             <form class="welcome-search" @submit.prevent="loadRepository()">
               <GitHubMark :size="17" />
               <input v-model="repositoryUrl" aria-label="GitHub repository URL" placeholder="github.com/owner/repository" spellcheck="false">
@@ -719,7 +1114,7 @@ function copyPath(path: string) {
               <div class="art-line"><FileImage :size="15" /><b>package.json</b><span>1.2 KB</span></div>
               <div class="art-foot"><span class="status-dot" /> 142 files indexed</div>
             </div>
-            <div class="art-stamp"><GitFork :size="16" /><span>FULL REPO<br>COPY</span></div>
+            <div class="art-stamp"><HardDrive :size="16" /><span>INDEPENDENT<br>REPO COPY</span></div>
           </div>
         </div>
 
@@ -740,13 +1135,38 @@ function copyPath(path: string) {
             <div class="overview-actions">
               <button class="copy-repo-button" type="button" :disabled="copyingRepository" @click="copyRepository">
                 <LoaderCircle v-if="copyingRepository" class="spin" :size="17" />
-                <GitFork v-else :size="17" />
-                {{ copyingRepository ? 'Copying repository…' : 'Copy repository to my GitHub' }}
+                <HardDrive v-else :size="17" />
+                {{ copyingRepository ? 'Copying repository…' : 'Create an independent copy' }}
               </button>
               <a class="secondary-action" :href="repository.html_url" target="_blank" rel="noreferrer">View on GitHub <ExternalLink :size="14" /></a>
             </div>
-            <div v-if="forkProgress" class="copy-progress"><LoaderCircle class="spin" :size="14" />{{ forkProgress }}</div>
-            <a v-if="forkUrl" class="fork-success" :href="forkUrl" target="_blank" rel="noreferrer"><Check :size="16" /> Open your repository copy <ExternalLink :size="13" /></a>
+            <section class="automation-panel" aria-labelledby="dependency-heading">
+              <div class="automation-heading">
+                <div><span class="eyebrow">DEPENDENCIES</span><h2 id="dependency-heading">Scheduled updates</h2></div>
+                <span class="automation-count">{{ dependencyEcosystems.length }} ecosystems detected</span>
+              </div>
+              <p>Open a pull request to configure GitHub Dependabot. After it is merged, GitHub checks these manifests weekly and opens dependency update pull requests.</p>
+              <div class="automation-actions">
+                <button class="automation-button" type="button" :disabled="scanningDependencies" @click="checkOutdatedDependencies">
+                  <LoaderCircle v-if="scanningDependencies" class="spin" :size="14" /><span v-else>Scan npm dependencies</span>
+                </button>
+                <button class="automation-button primary" type="button" :disabled="configuringDependencies || !dependencyEcosystems.length || hasDependabotConfig" @click="enableDependencyUpdates">
+                  <LoaderCircle v-if="configuringDependencies" class="spin" :size="14" /><span v-else>{{ hasDependabotConfig ? 'Dependabot configured' : 'Configure Dependabot' }}</span>
+                </button>
+                <button class="automation-button" type="button" :disabled="loadingDependencyPullRequests" @click="loadDependencyPullRequests">
+                  <LoaderCircle v-if="loadingDependencyPullRequests" class="spin" :size="14" /><span v-else>Check open update PRs</span>
+                </button>
+              </div>
+              <div v-if="dependencyScanComplete && !outdatedDependencies.length" class="automation-empty">No outdated npm dependencies found.</div>
+              <div v-for="dependency in outdatedDependencies" :key="`${dependency.manifestPath}:${dependency.name}`" class="dependency-result">
+                <span class="dependency-name">{{ dependency.name }}</span><span>{{ dependency.current }} <ChevronRight :size="12" /> {{ dependency.latest }}</span><small>{{ dependency.manifestPath }}</small>
+              </div>
+              <a v-if="createdPullRequest" class="automation-pr" :href="createdPullRequest.url" target="_blank" rel="noreferrer"><Check :size="14" /> {{ createdPullRequest.title }} <ExternalLink :size="12" /></a>
+              <div v-if="dependencyPullRequestsLoaded && !dependencyPullRequests.length" class="automation-empty">No open Dependabot pull requests.</div>
+              <a v-for="pull in dependencyPullRequests" :key="pull.number" class="automation-pr" :href="pull.html_url" target="_blank" rel="noreferrer"><span>#{{ pull.number }}</span>{{ pull.title }}<ExternalLink :size="12" /></a>
+            </section>
+            <div v-if="copyProgress" class="copy-progress"><LoaderCircle class="spin" :size="14" />{{ copyProgress }}</div>
+            <a v-if="copyUrl" class="fork-success" :href="copyUrl" target="_blank" rel="noreferrer"><Check :size="16" /> {{ copyLinkLabel }} <ExternalLink :size="13" /></a>
             <div class="overview-divider" />
             <div class="folder-prompt"><FolderOpen :size="16" /><span>Choose a folder or file from the tree to explore its contents.</span></div>
           </div>
@@ -786,11 +1206,11 @@ function copyPath(path: string) {
       <section class="auth-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-heading">
         <div class="dialog-heading"><div class="dialog-mark"><GitHubMark :size="20" /></div><button class="icon-button" type="button" aria-label="Close" @click="showAuth = false"><X :size="18" /></button></div>
         <h2 id="auth-heading">Connect your GitHub</h2>
-        <p class="dialog-copy">Use a personal access token to create repository copies and browse your private repositories. Your token is sent directly to GitHub and held in memory only.</p>
+        <p class="dialog-copy">Use a personal access token to create repositories, browse private repositories, and manage files. Your token is sent directly to GitHub and held in memory only.</p>
         <form class="auth-form" @submit.prevent="signIn">
           <label for="github-token">Personal access token</label>
           <input id="github-token" v-model="tokenInput" type="password" autocomplete="off" placeholder="github_pat_…">
-          <span class="input-hint">A token with repository access is needed to create forks. <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">Create one <ExternalLink :size="12" /></a></span>
+          <span class="input-hint">Grant repository read/write access and repository creation permission. <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">Create one <ExternalLink :size="12" /></a></span>
           <button class="copy-repo-button auth-submit" type="submit"><ShieldCheck :size="16" /> Connect securely</button>
         </form>
         <div class="security-note"><ShieldCheck :size="15" /><span>GitView has no server-side token storage. Signing out clears the token immediately.</span></div>
