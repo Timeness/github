@@ -3,9 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "nuxt dev --host 0.0.0.0",
+    "dev": "nuxt dev -- --port 3003",
     "build": "nuxt build",
-    "preview": "nuxt preview --host 0.0.0.0",
+    "preview": "nuxt preview -- --port 3003",
     "typecheck": "nuxt typecheck"
   },
   "dependencies": {
@@ -20,6 +20,8 @@
     "vue": "^3.5.13"
   },
   "devDependencies": {
+    "@iconify-json/lucide": "^1.2.143",
+    "@iconify-json/vscode-icons": "^1.2.88",
     "typescript": "~5.8.3",
     "vue-tsc": "^2.2.8"
   }
