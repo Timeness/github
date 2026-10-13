@@ -52,7 +52,7 @@ import 'highlight.js/styles/github.css'
 import {
   Check, ChevronDown, ChevronRight, CircleAlert, Clock3, Code2, Copy, Eye,
   ExternalLink, FileImage, FileText, Folder,
-  FolderOpen, HardDrive, LoaderCircle, LogOut, RefreshCw, Search,
+  FolderOpen, GitFork, HardDrive, LoaderCircle, LogOut, RefreshCw, Search,
   ShieldCheck, Star, X
 } from '@lucide/vue'
 
@@ -131,6 +131,9 @@ const createdPullRequest = shallowRef<{ title: string; url: string } | null>(nul
 const copyUrl = ref('')
 const copyLinkLabel = ref('Open your independent copy')
 const copyProgress = ref('')
+const forkingRepository = ref(false)
+const forkUrl = ref('')
+const forkProgress = ref('')
 const token = ref('')
 const tokenInput = ref('')
 const user = shallowRef<GitHubUser | null>(null)
@@ -447,6 +450,8 @@ async function loadRepository(value = repositoryUrl.value) {
   previewImage.value = ''
   copyUrl.value = ''
   copyLinkLabel.value = 'Open your independent copy'
+  forkUrl.value = ''
+  forkProgress.value = ''
 
   try {
     const { data: details } = await githubRequest<Repository>(`/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.name)}`)
@@ -754,6 +759,56 @@ async function copyRepository() {
     notify(destinationUrl ? `Copy stopped: ${errorMessage(error)} Open the destination to inspect the partial copy.` : errorMessage(error), 'error')
   } finally {
     copyingRepository.value = false
+  }
+}
+
+async function forkRepository() {
+  const source = repository.value
+  const account = user.value
+  if (!source || forkingRepository.value || copyingRepository.value) return
+  if (!account || !token.value) {
+    showAuth.value = true
+    notify('Sign in with a GitHub token to fork this repository.', 'info')
+    return
+  }
+  if (source.owner.login.toLowerCase() === account.login.toLowerCase()) {
+    notify('This repository is already under your account; GitHub cannot fork it to the same owner.', 'info')
+    return
+  }
+
+  forkingRepository.value = true
+  forkUrl.value = ''
+  forkProgress.value = 'Checking for an existing fork…'
+  try {
+    const targetPath = `/repos/${encodeURIComponent(account.login)}/${encodeURIComponent(source.name)}`
+    try {
+      const { data: existing } = await githubRequest<Repository & { fork?: boolean; parent?: { full_name: string } }>(targetPath)
+      if (existing.fork && existing.parent?.full_name.toLowerCase() === source.full_name.toLowerCase()) {
+        forkUrl.value = existing.html_url
+        forkProgress.value = ''
+        notify('This repository is already forked to your account.', 'info')
+        await loadUserRepositories()
+        return
+      }
+      throw new Error(`A repository named ${source.name} already exists in your account, so GitHub cannot create a fork with that name.`)
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.includes('not found')) throw error
+    }
+
+    forkProgress.value = 'Requesting GitHub fork…'
+    const { data: fork } = await githubRequest<Repository>(`/repos/${source.full_name}/forks`, {
+      method: 'POST',
+      body: JSON.stringify({ name: source.name })
+    })
+    forkUrl.value = fork.html_url
+    forkProgress.value = ''
+    notify('GitHub fork created. GitHub is copying the repository now.', 'success')
+    await loadUserRepositories()
+  } catch (error) {
+    forkProgress.value = ''
+    notify(errorMessage(error), 'error')
+  } finally {
+    forkingRepository.value = false
   }
 }
 
@@ -1133,10 +1188,15 @@ function copyPath(path: string) {
               <span><HardDrive :size="14" /> {{ tree.filter(entry => entry.type === 'blob').length }} files</span>
             </div>
             <div class="overview-actions">
-              <button class="copy-repo-button" type="button" :disabled="copyingRepository" @click="copyRepository">
+              <button class="copy-repo-button" type="button" :disabled="copyingRepository || forkingRepository" @click="copyRepository">
                 <LoaderCircle v-if="copyingRepository" class="spin" :size="17" />
                 <HardDrive v-else :size="17" />
                 {{ copyingRepository ? 'Copying repository…' : 'Create an independent copy' }}
+              </button>
+              <button class="fork-repo-button" type="button" :disabled="copyingRepository || forkingRepository" @click="forkRepository">
+                <LoaderCircle v-if="forkingRepository" class="spin" :size="16" />
+                <GitFork v-else :size="16" />
+                {{ forkingRepository ? 'Forking…' : 'Create a fork' }}
               </button>
               <a class="secondary-action" :href="repository.html_url" target="_blank" rel="noreferrer">View on GitHub <ExternalLink :size="14" /></a>
             </div>
@@ -1167,6 +1227,8 @@ function copyPath(path: string) {
             </section>
             <div v-if="copyProgress" class="copy-progress"><LoaderCircle class="spin" :size="14" />{{ copyProgress }}</div>
             <a v-if="copyUrl" class="fork-success" :href="copyUrl" target="_blank" rel="noreferrer"><Check :size="16" /> {{ copyLinkLabel }} <ExternalLink :size="13" /></a>
+            <div v-if="forkProgress" class="copy-progress"><LoaderCircle class="spin" :size="14" />{{ forkProgress }}</div>
+            <a v-if="forkUrl" class="fork-success" :href="forkUrl" target="_blank" rel="noreferrer"><GitFork :size="15" /> Open your GitHub fork <ExternalLink :size="13" /></a>
             <div class="overview-divider" />
             <div class="folder-prompt"><FolderOpen :size="16" /><span>Choose a folder or file from the tree to explore its contents.</span></div>
           </div>
