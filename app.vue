@@ -2,52 +2,52 @@
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import bashIcon from 'simple-icons/icons/gnubash.svg?raw'
+import adaIcon from 'simple-icons/icons/ada.svg?raw'
+import arduinoIcon from 'simple-icons/icons/arduino.svg?raw'
 import cIcon from 'simple-icons/icons/c.svg?raw'
 import cppIcon from 'simple-icons/icons/cplusplus.svg?raw'
 import csharpIcon from 'simple-icons/icons/dotnet.svg?raw'
+import clojureIcon from 'simple-icons/icons/clojure.svg?raw'
+import crystalIcon from 'simple-icons/icons/crystal.svg?raw'
 import cssIcon from 'simple-icons/icons/css.svg?raw'
+import dartIcon from 'simple-icons/icons/dart.svg?raw'
 import dockerIcon from 'simple-icons/icons/docker.svg?raw'
+import elmIcon from 'simple-icons/icons/elm.svg?raw'
+import elixirIcon from 'simple-icons/icons/elixir.svg?raw'
+import erlangIcon from 'simple-icons/icons/erlang.svg?raw'
+import fortranIcon from 'simple-icons/icons/fortran.svg?raw'
+import fsharpIcon from 'simple-icons/icons/fsharp.svg?raw'
 import goIcon from 'simple-icons/icons/go.svg?raw'
+import graphqlIcon from 'simple-icons/icons/graphql.svg?raw'
+import haskellIcon from 'simple-icons/icons/haskell.svg?raw'
+import haxeIcon from 'simple-icons/icons/haxe.svg?raw'
 import htmlIcon from 'simple-icons/icons/html5.svg?raw'
 import javaIcon from 'simple-icons/icons/openjdk.svg?raw'
 import javascriptIcon from 'simple-icons/icons/javascript.svg?raw'
+import juliaIcon from 'simple-icons/icons/julia.svg?raw'
 import jsonIcon from 'simple-icons/icons/json.svg?raw'
 import kotlinIcon from 'simple-icons/icons/kotlin.svg?raw'
 import luaIcon from 'simple-icons/icons/lua.svg?raw'
 import markdownIcon from 'simple-icons/icons/markdown.svg?raw'
+import nimIcon from 'simple-icons/icons/nim.svg?raw'
+import ocamlIcon from 'simple-icons/icons/ocaml.svg?raw'
+import perlIcon from 'simple-icons/icons/perl.svg?raw'
 import phpIcon from 'simple-icons/icons/php.svg?raw'
 import pythonIcon from 'simple-icons/icons/python.svg?raw'
+import racketIcon from 'simple-icons/icons/racket.svg?raw'
+import rIcon from 'simple-icons/icons/r.svg?raw'
 import rubyIcon from 'simple-icons/icons/ruby.svg?raw'
 import rustIcon from 'simple-icons/icons/rust.svg?raw'
 import sassIcon from 'simple-icons/icons/sass.svg?raw'
+import scalaIcon from 'simple-icons/icons/scala.svg?raw'
 import svelteIcon from 'simple-icons/icons/svelte.svg?raw'
 import swiftIcon from 'simple-icons/icons/swift.svg?raw'
 import typescriptIcon from 'simple-icons/icons/typescript.svg?raw'
+import vueIcon from 'simple-icons/icons/vuedotjs.svg?raw'
+import valaIcon from 'simple-icons/icons/vala.svg?raw'
+import webassemblyIcon from 'simple-icons/icons/webassembly.svg?raw'
+import zigIcon from 'simple-icons/icons/zig.svg?raw'
 import hljs from 'highlight.js/lib/core'
-import bash from 'highlight.js/lib/languages/bash'
-import c from 'highlight.js/lib/languages/c'
-import cpp from 'highlight.js/lib/languages/cpp'
-import csharp from 'highlight.js/lib/languages/csharp'
-import css from 'highlight.js/lib/languages/css'
-import dockerfile from 'highlight.js/lib/languages/dockerfile'
-import go from 'highlight.js/lib/languages/go'
-import java from 'highlight.js/lib/languages/java'
-import javascript from 'highlight.js/lib/languages/javascript'
-import json from 'highlight.js/lib/languages/json'
-import kotlin from 'highlight.js/lib/languages/kotlin'
-import lua from 'highlight.js/lib/languages/lua'
-import makefile from 'highlight.js/lib/languages/makefile'
-import markdown from 'highlight.js/lib/languages/markdown'
-import php from 'highlight.js/lib/languages/php'
-import python from 'highlight.js/lib/languages/python'
-import ruby from 'highlight.js/lib/languages/ruby'
-import rust from 'highlight.js/lib/languages/rust'
-import scss from 'highlight.js/lib/languages/scss'
-import sql from 'highlight.js/lib/languages/sql'
-import swift from 'highlight.js/lib/languages/swift'
-import typescript from 'highlight.js/lib/languages/typescript'
-import xml from 'highlight.js/lib/languages/xml'
-import yaml from 'highlight.js/lib/languages/yaml'
 import 'highlight.js/styles/github.css'
 import {
   Check, ChevronDown, ChevronRight, CircleAlert, Clock3, Code2, Copy, Eye,
@@ -94,11 +94,24 @@ type GitHubUser = {
 }
 
 type Toast = { id: number; message: string; kind: 'success' | 'error' | 'info' }
-type DependencyPullRequest = { number: number; title: string; html_url: string; user: { login: string } }
-type OutdatedDependency = { name: string; current: string; latest: string; manifestPath: string }
+type ConfirmationRequest = { title: string; message: string; confirmLabel: string; tone: 'danger' | 'primary' }
+type DependencyPullRequest = { number: number; title: string; html_url: string; user: { login: string }; head: { sha: string } }
 
-for (const [name, language] of Object.entries({ bash, c, cpp, csharp, css, dockerfile, go, java, javascript, json, kotlin, lua, makefile, markdown, php, python, ruby, rust, scss, sql, swift, typescript, xml, yaml })) {
-  hljs.registerLanguage(name, language)
+type HighlightLanguageFactory = Parameters<typeof hljs.registerLanguage>[1]
+const highlightLanguageLoaders = import.meta.glob<Record<string, unknown>>('./node_modules/highlight.js/lib/languages/*.js')
+const highlightLanguagePath = (name: string) => `./node_modules/highlight.js/lib/languages/${name}.js`
+
+async function loadHighlightLanguage(name: string) {
+  if (hljs.getLanguage(name)) return true
+  const loader = highlightLanguageLoaders[highlightLanguagePath(name)]
+  if (!loader) return false
+  const module = await loader()
+  const factory = (typeof module.default === 'function'
+    ? module.default
+    : Object.values(module).find(value => typeof value === 'function')) as HighlightLanguageFactory | undefined
+  if (!factory) return false
+  hljs.registerLanguage(name, factory)
+  return true
 }
 
 const repositoryUrl = ref('')
@@ -124,9 +137,10 @@ const configuringDependencies = ref(false)
 const loadingDependencyPullRequests = ref(false)
 const dependencyPullRequestsLoaded = ref(false)
 const dependencyPullRequests = ref<DependencyPullRequest[]>([])
-const scanningDependencies = ref(false)
-const dependencyScanComplete = ref(false)
-const outdatedDependencies = ref<OutdatedDependency[]>([])
+const dependencyPullRequestMode = ref<'dependabot' | 'all'>('dependabot')
+const selectedDependencyPullNumbers = ref<number[]>([])
+const dependencyPullRequestAction = ref<'close' | 'merge' | null>(null)
+const dependencyPullRequestProgress = ref('')
 const createdPullRequest = shallowRef<{ title: string; url: string } | null>(null)
 const copyUrl = ref('')
 const copyLinkLabel = ref('Open your independent copy')
@@ -143,7 +157,9 @@ const showAuth = ref(false)
 const showRepositoryPicker = ref(false)
 const repositorySearch = ref('')
 const toasts = ref<Toast[]>([])
+const confirmation = shallowRef<ConfirmationRequest | null>(null)
 const rateLimit = ref('GitHub API ready')
+let settleConfirmation: ((confirmed: boolean) => void) | null = null
 let toastId = 0
 
 const apiBase = 'https://api.github.com'
@@ -336,10 +352,12 @@ const dependencyEcosystems = computed(() => {
     else if (/\.csproj$/.test(name)) add('nuget', entry.path)
     else if (/^dockerfile(\..+)?$/.test(name)) add('docker', entry.path)
     else if (/\.tf$/.test(name)) add('terraform', entry.path)
-    else if (path.startsWith('.github/workflows/') && /\.ya?ml$/.test(name)) add('github-actions', '.github/workflows/workflow.yml')
+    else if (path.startsWith('.github/workflows/') && /\.ya?ml$/.test(name)) add('github-actions', 'workflow.yml')
   }
   return entries
 })
+
+const allDependencyPullRequestsSelected = computed(() => dependencyPullRequests.value.length > 0 && dependencyPullRequests.value.every(pull => selectedDependencyPullNumbers.value.includes(pull.number)))
 
 const hasDependabotConfig = computed(() => tree.value.some(entry => ['.github/dependabot.yml', '.github/dependabot.yaml'].includes(entry.path)))
 
@@ -361,8 +379,10 @@ const fileKind = computed(() => {
   if (/^\.env(?:\.|$)/.test(name)) return 'code'
   if (/\.(md|markdown)$/.test(name) || ['readme', 'changelog'].includes(name)) return 'markdown'
   if (/\.html?$/.test(name)) return 'html'
-  if (['dockerfile', 'makefile'].includes(name)) return 'code'
-  if (/\.(txt|log|csv|env|gitignore|ya?ml|toml|xml|json|css|scss|js|jsx|mjs|cjs|ts|tsx|mts|cts|py|pyw|java|c|cc|cpp|cxx|h|hpp|hxx|cs|go|rs|sh|bash|sql|kt|swift|lua|php|rb|vue|svelte)$/.test(name)) return 'code'
+  const extension = name.includes('.') ? name.split('.').pop() || '' : name
+  if (extension === 'wasm') return 'binary'
+  if (languageMap[extension] || highlightLanguageLoaders[highlightLanguagePath(extension)]) return 'code'
+  if (/\.(txt|log|csv|gitignore|ya?ml|toml|xml|json|ini|cfg|conf|properties)$/.test(name)) return 'code'
   return 'binary'
 })
 
@@ -417,49 +437,155 @@ const languageMap: Record<string, LanguageInfo> = {
   yaml: { label: 'YAML', mark: 'Y', slug: 'yaml', highlight: 'yaml' },
   yml: { label: 'YAML', mark: 'Y', slug: 'yaml', highlight: 'yaml' },
   vue: { label: 'Vue', mark: 'V', slug: 'vue', highlight: 'xml' },
+  awk: { label: 'AWK', mark: 'Awk', slug: 'awk', highlight: 'awk' },
+  clj: { label: 'Clojure', mark: 'Clj', slug: 'clojure', highlight: 'clojure' },
+  cljs: { label: 'ClojureScript', mark: 'Cljs', slug: 'clojure', highlight: 'clojure' },
+  cljc: { label: 'Clojure', mark: 'Clj', slug: 'clojure', highlight: 'clojure' },
+  cr: { label: 'Crystal', mark: 'Cr', slug: 'crystal', highlight: 'crystal' },
+  dart: { label: 'Dart', mark: 'Dart', slug: 'dart', highlight: 'dart' },
+  ex: { label: 'Elixir', mark: 'Ex', slug: 'elixir', highlight: 'elixir' },
+  exs: { label: 'Elixir', mark: 'Ex', slug: 'elixir', highlight: 'elixir' },
+  erl: { label: 'Erlang', mark: 'Er', slug: 'erlang', highlight: 'erlang' },
+  hrl: { label: 'Erlang', mark: 'Er', slug: 'erlang', highlight: 'erlang' },
+  f: { label: 'Fortran', mark: 'F', slug: 'fortran', highlight: 'fortran' },
+  f03: { label: 'Fortran', mark: 'F', slug: 'fortran', highlight: 'fortran' },
+  f90: { label: 'Fortran', mark: 'F', slug: 'fortran', highlight: 'fortran' },
+  f95: { label: 'Fortran', mark: 'F', slug: 'fortran', highlight: 'fortran' },
+  for: { label: 'Fortran', mark: 'F', slug: 'fortran', highlight: 'fortran' },
+  fs: { label: 'F#', mark: 'F#', slug: 'fsharp', highlight: 'fsharp' },
+  fsi: { label: 'F#', mark: 'F#', slug: 'fsharp', highlight: 'fsharp' },
+  fsx: { label: 'F#', mark: 'F#', slug: 'fsharp', highlight: 'fsharp' },
+  gradle: { label: 'Gradle', mark: 'Gr', slug: 'groovy', highlight: 'groovy' },
+  groovy: { label: 'Groovy', mark: 'Gr', slug: 'groovy', highlight: 'groovy' },
+  gvy: { label: 'Groovy', mark: 'Gr', slug: 'groovy', highlight: 'groovy' },
+  hs: { label: 'Haskell', mark: 'Hs', slug: 'haskell', highlight: 'haskell' },
+  lhs: { label: 'Haskell', mark: 'Hs', slug: 'haskell', highlight: 'haskell' },
+  jl: { label: 'Julia', mark: 'Jl', slug: 'julia', highlight: 'julia' },
+  kts: { label: 'Kotlin', mark: 'Kt', slug: 'kotlin', highlight: 'kotlin' },
+  m: { label: 'Objective-C', mark: 'ObjC', slug: 'objectivec', highlight: 'objectivec' },
+  mm: { label: 'Objective-C++', mark: 'ObjC', slug: 'objectivec', highlight: 'objectivec' },
+  mat: { label: 'MATLAB', mark: 'Mat', slug: 'matlab', highlight: 'matlab' },
+  matlab: { label: 'MATLAB', mark: 'Mat', slug: 'matlab', highlight: 'matlab' },
+  ml: { label: 'OCaml', mark: 'ML', slug: 'ocaml', highlight: 'ocaml' },
+  mli: { label: 'OCaml', mark: 'ML', slug: 'ocaml', highlight: 'ocaml' },
+  nim: { label: 'Nim', mark: 'Nim', slug: 'nim', highlight: 'nim' },
+  nims: { label: 'Nim', mark: 'Nim', slug: 'nim', highlight: 'nim' },
+  pl: { label: 'Perl', mark: 'Pl', slug: 'perl', highlight: 'perl' },
+  pm: { label: 'Perl', mark: 'Pm', slug: 'perl', highlight: 'perl' },
+  ps1: { label: 'PowerShell', mark: 'PS', slug: 'powershell', highlight: 'powershell' },
+  psm1: { label: 'PowerShell', mark: 'PS', slug: 'powershell', highlight: 'powershell' },
+  r: { label: 'R', mark: 'R', slug: 'r', highlight: 'r' },
+  scala: { label: 'Scala', mark: 'Sc', slug: 'scala', highlight: 'scala' },
+  sc: { label: 'Scala', mark: 'Sc', slug: 'scala', highlight: 'scala' },
+  sol: { label: 'Solidity', mark: 'Sol', slug: 'solidity', highlight: 'solidity' },
+  tf: { label: 'Terraform', mark: 'Tf', slug: 'terraform', highlight: 'hcl' },
+  tfvars: { label: 'Terraform', mark: 'Tf', slug: 'terraform', highlight: 'hcl' },
+  toml: { label: 'TOML', mark: 'Toml', slug: 'toml', highlight: 'toml' },
+  zig: { label: 'Zig', mark: 'Zig', slug: 'zig', highlight: null },
+  zsh: { label: 'Zsh', mark: 'Zsh', slug: 'bash', highlight: 'bash' },
+  ada: { label: 'Ada', mark: 'Ada', slug: 'ada', highlight: 'ada' },
+  adb: { label: 'Ada', mark: 'Ada', slug: 'ada', highlight: 'ada' },
+  ads: { label: 'Ada', mark: 'Ada', slug: 'ada', highlight: 'ada' },
+  ino: { label: 'Arduino', mark: 'Ino', slug: 'arduino', highlight: 'arduino' },
+  asm: { label: 'Assembly', mark: 'ASM', slug: 'assembly', highlight: 'x86asm' },
+  s: { label: 'Assembly', mark: 'ASM', slug: 'assembly', highlight: 'x86asm' },
+  bzl: { label: 'Starlark', mark: 'Bzl', slug: 'bazel', highlight: 'python' },
+  bazel: { label: 'Starlark', mark: 'Bzl', slug: 'bazel', highlight: 'python' },
+  cbl: { label: 'COBOL', mark: 'Cob', slug: 'cobol', highlight: null },
+  cob: { label: 'COBOL', mark: 'Cob', slug: 'cobol', highlight: null },
+  d: { label: 'D', mark: 'D', slug: 'd', highlight: 'd' },
+  elm: { label: 'Elm', mark: 'Elm', slug: 'elm', highlight: 'elm' },
+  gql: { label: 'GraphQL', mark: 'GQL', slug: 'graphql', highlight: 'graphql' },
+  graphql: { label: 'GraphQL', mark: 'GQL', slug: 'graphql', highlight: 'graphql' },
+  hx: { label: 'Haxe', mark: 'Hx', slug: 'haxe', highlight: 'haxe' },
+  ini: { label: 'INI', mark: 'INI', slug: 'ini', highlight: 'ini' },
+  cfg: { label: 'Config', mark: 'CFG', slug: 'ini', highlight: 'ini' },
+  conf: { label: 'Config', mark: 'CFG', slug: 'ini', highlight: 'ini' },
+  properties: { label: 'Properties', mark: 'Prop', slug: 'ini', highlight: 'properties' },
+  lisp: { label: 'Lisp', mark: 'Lisp', slug: 'lisp', highlight: 'lisp' },
+  lsp: { label: 'Lisp', mark: 'Lisp', slug: 'lisp', highlight: 'lisp' },
+  nix: { label: 'Nix', mark: 'Nix', slug: 'nix', highlight: 'nix' },
+  pro: { label: 'Prolog', mark: 'Pro', slug: 'prolog', highlight: 'prolog' },
+  prolog: { label: 'Prolog', mark: 'Pro', slug: 'prolog', highlight: 'prolog' },
+  rkt: { label: 'Racket', mark: 'Rkt', slug: 'racket', highlight: 'racket' },
+  scm: { label: 'Scheme', mark: 'Scm', slug: 'scheme', highlight: 'scheme' },
+  ss: { label: 'Scheme', mark: 'Scm', slug: 'scheme', highlight: 'scheme' },
+  vala: { label: 'Vala', mark: 'Vala', slug: 'vala', highlight: 'vala' },
+  v: { label: 'Verilog', mark: 'V', slug: 'verilog', highlight: 'verilog' },
+  sv: { label: 'SystemVerilog', mark: 'SV', slug: 'verilog', highlight: 'verilog' },
+  vhd: { label: 'VHDL', mark: 'VHDL', slug: 'vhdl', highlight: 'vhdl' },
+  vhdl: { label: 'VHDL', mark: 'VHDL', slug: 'vhdl', highlight: 'vhdl' },
+  wat: { label: 'WebAssembly', mark: 'Wasm', slug: 'webassembly', highlight: 'wasm' },
+  wast: { label: 'WebAssembly', mark: 'Wasm', slug: 'webassembly', highlight: 'wasm' },
 }
 
 const languageInfo = computed<LanguageInfo>(() => {
   const name = activeFile.value?.name.toLowerCase() || ''
   const extension = name.includes('.') ? name.split('.').pop() || '' : name
-  const language = languageMap[extension] || { label: 'Plain text', mark: 'TXT', slug: 'text', highlight: null }
-  return language.highlight && !hljs.getLanguage(language.highlight)
-    ? { ...language, highlight: null }
-    : language
+  return languageMap[extension] || {
+    label: extension ? extension.toUpperCase() : 'Plain text',
+    mark: extension ? extension.slice(0, 4).toUpperCase() : 'TXT',
+    slug: extension,
+    highlight: highlightLanguageLoaders[highlightLanguagePath(extension)] ? extension : null
+  }
 })
 
 const languageIcons: Record<string, string> = {
+  ada: adaIcon,
+  arduino: arduinoIcon,
   bash: bashIcon,
   c: cIcon,
   cpp: cppIcon,
   csharp: csharpIcon,
   css: cssIcon,
+  clojure: clojureIcon,
+  crystal: crystalIcon,
+  dart: dartIcon,
   docker: dockerIcon,
+  elm: elmIcon,
+  elixir: elixirIcon,
+  erlang: erlangIcon,
+  fortran: fortranIcon,
+  fsharp: fsharpIcon,
   go: goIcon,
+  graphql: graphqlIcon,
+  haxe: haxeIcon,
+  haskell: haskellIcon,
   html: htmlIcon,
   java: javaIcon,
   javascript: javascriptIcon,
+  julia: juliaIcon,
   json: jsonIcon,
   kotlin: kotlinIcon,
   lua: luaIcon,
   markdown: markdownIcon,
+  nim: nimIcon,
+  ocaml: ocamlIcon,
+  perl: perlIcon,
   php: phpIcon,
   python: pythonIcon,
+  racket: racketIcon,
+  r: rIcon,
   ruby: rubyIcon,
   rust: rustIcon,
   sass: sassIcon,
+  scala: scalaIcon,
   svelte: svelteIcon,
   swift: swiftIcon,
   typescript: typescriptIcon,
+  vue: vueIcon,
+  vala: valaIcon,
+  webassembly: webassemblyIcon,
+  zig: zigIcon,
 }
 
 const languageBrandColors: Record<string, string> = {
-  bash: '#4eaa25', c: '#536a8c', cpp: '#00599c', csharp: '#512bd4',
-  css: '#663399', docker: '#2496ed', go: '#00add8', html: '#e34f26',
-  java: '#ed8b00', javascript: '#d8b900', json: '#626d78', kotlin: '#7f52ff',
-  lua: '#000080', markdown: '#4b5563', php: '#777bb4', python: '#3776ab',
-  ruby: '#cc342d', rust: '#8d4a36', sass: '#cc6699', svelte: '#ff3e00',
-  swift: '#f05138', typescript: '#3178c6',
+  ada: '#02f88c', arduino: '#00878f', bash: '#4eaa25', c: '#536a8c', cpp: '#00599c', csharp: '#512bd4',
+  css: '#663399', clojure: '#5881d8', crystal: '#000100', dart: '#0175c2', docker: '#2496ed', elm: '#60b5cc', elixir: '#4b275f', erlang: '#a90533', fortran: '#734f96', fsharp: '#378bba', go: '#00add8', graphql: '#e10098', haskell: '#5e5086', haxe: '#df7900', html: '#e34f26',
+  java: '#ed8b00', javascript: '#d8b900', json: '#626d78', julia: '#9558b2', kotlin: '#7f52ff',
+  lua: '#000080', markdown: '#4b5563', nim: '#ffe953', ocaml: '#ec6813', perl: '#39457e', php: '#777bb4', python: '#3776ab', r: '#276dc3',
+  racket: '#9f1d20', ruby: '#cc342d', rust: '#8d4a36', sass: '#cc6699', scala: '#dc322f', svelte: '#ff3e00',
+  swift: '#f05138', typescript: '#3178c6', vala: '#7239b3', vue: '#42b883', webassembly: '#654ff0', zig: '#f7a41d',
 }
 
 const languageIconSvg = computed(() => languageIcons[languageInfo.value.slug] || '')
@@ -480,40 +606,23 @@ function notify(message: string, kind: Toast['kind'] = 'info') {
   window.setTimeout(() => { toasts.value = toasts.value.filter(toast => toast.id !== id) }, 4200)
 }
 
+function requestConfirmation(request: ConfirmationRequest) {
+  if (settleConfirmation) return Promise.resolve(false)
+  return new Promise<boolean>(resolve => {
+    settleConfirmation = resolve
+    confirmation.value = request
+  })
+}
+
+function resolveConfirmation(confirmed: boolean) {
+  const settle = settleConfirmation
+  settleConfirmation = null
+  confirmation.value = null
+  settle?.(confirmed)
+}
+
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Something went wrong. Please try again.'
-}
-
-function parseVersion(value: string) {
-  const match = value.trim().match(/^[v=~^<>\s]*(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/)
-  return match ? { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]), prerelease: Boolean(match[4]) } : null
-}
-
-function versionIsNewer(candidate: string, current: string) {
-  const next = parseVersion(candidate)
-  const installed = parseVersion(current)
-  if (!next || !installed) return false
-  if (next.major !== installed.major) return next.major > installed.major
-  if (next.minor !== installed.minor) return next.minor > installed.minor
-  if (next.patch !== installed.patch) return next.patch > installed.patch
-  return installed.prerelease && !next.prerelease
-}
-
-function rangeAllowsVersion(spec: string, latest: string) {
-  const trimmed = spec.trim()
-  const installed = parseVersion(trimmed.replace(/^[~^]/, ''))
-  const candidate = parseVersion(latest)
-  if (!installed || !candidate) return false
-  if (trimmed.startsWith('^')) {
-    const ceiling = installed.major > 0
-      ? { major: installed.major + 1, minor: 0, patch: 0 }
-      : installed.minor > 0
-        ? { major: 0, minor: installed.minor + 1, patch: 0 }
-        : { major: 0, minor: 0, patch: installed.patch + 1 }
-    return candidate.major < ceiling.major || candidate.major === ceiling.major && (candidate.minor < ceiling.minor || candidate.minor === ceiling.minor && candidate.patch < ceiling.patch)
-  }
-  if (trimmed.startsWith('~')) return candidate.major === installed.major && candidate.minor === installed.minor && candidate.patch >= installed.patch
-  return false
 }
 
 async function githubRequest<T>(path: string, init: RequestInit = {}): Promise<{ data: T; response: Response }> {
@@ -566,8 +675,9 @@ async function loadRepository(value = repositoryUrl.value) {
   selectionMode.value = false
   dependencyPullRequests.value = []
   dependencyPullRequestsLoaded.value = false
-  outdatedDependencies.value = []
-  dependencyScanComplete.value = false
+  dependencyPullRequestMode.value = 'dependabot'
+  selectedDependencyPullNumbers.value = []
+  dependencyPullRequestProgress.value = ''
   createdPullRequest.value = null
   currentPath.value = ''
   activeFile.value = null
@@ -724,7 +834,9 @@ async function openFile(item: ExplorerItem) {
       const mime = extension === 'svg' ? 'image/svg+xml' : `image/${extension === 'jpg' ? 'jpeg' : extension}`
       previewImage.value = `data:${mime};base64,${data.content.replace(/\s/g, '')}`
     } else if (['markdown', 'code', 'html'].includes(fileKind.value)) {
-      previewText.value = await fetchPreviewText(item)
+      const source = await fetchPreviewText(item)
+      if (languageInfo.value.highlight) await loadHighlightLanguage(languageInfo.value.highlight)
+      previewText.value = source
       if (fileKind.value === 'markdown') previewHtml.value = await renderMarkdown(previewText.value, item.path)
       if (fileKind.value === 'html') websiteDocument.value = prepareWebsiteDocument(previewText.value, item.path)
     } else {
@@ -1027,7 +1139,13 @@ async function deleteSelectedPaths() {
     notify('The selection contains no files to delete.', 'error')
     return
   }
-  if (!window.confirm(`Create a pull request deleting ${files.size} file${files.size === 1 ? '' : 's'} from ${repo.full_name}? The changes will not be merged automatically.`)) return
+  const confirmed = await requestConfirmation({
+    title: 'Create deletion pull request?',
+    message: `This will propose deleting ${files.size} selected file${files.size === 1 ? '' : 's'} from ${repo.full_name}. The repository will not change unless the pull request is merged.`,
+    confirmLabel: 'Create pull request',
+    tone: 'danger'
+  })
+  if (!confirmed) return
 
   deletingFiles.value = true
   try {
@@ -1056,7 +1174,7 @@ async function enableDependencyUpdates() {
     notify('No supported dependency manifests were found in this repository.', 'error')
     return
   }
-  if (tree.value.some(entry => entry.path === '.github/dependabot.yml')) {
+  if (hasDependabotConfig.value) {
     notify('This repository already has a Dependabot configuration.', 'info')
     return
   }
@@ -1076,7 +1194,7 @@ async function enableDependencyUpdates() {
   }
 }
 
-async function loadDependencyPullRequests() {
+async function loadDependencyPullRequests(mode: 'dependabot' | 'all' = 'dependabot', excludedNumbers: number[] = []) {
   const repo = repository.value
   if (!repo) return
   if (!token.value) {
@@ -1086,8 +1204,17 @@ async function loadDependencyPullRequests() {
   }
   loadingDependencyPullRequests.value = true
   try {
-    const { data } = await githubRequest<DependencyPullRequest[]>(`/repos/${repo.full_name}/pulls?state=open&per_page=100`)
-    dependencyPullRequests.value = data.filter(pull => pull.user.login.toLowerCase().includes('dependabot'))
+    const openPullRequests: DependencyPullRequest[] = []
+    for (let page = 1; page <= 20; page++) {
+      const { data } = await githubRequest<DependencyPullRequest[]>(`/repos/${repo.full_name}/pulls?state=open&per_page=100&page=${page}`, { cache: 'no-store' })
+      openPullRequests.push(...data)
+      if (data.length < 100) break
+    }
+    dependencyPullRequestMode.value = mode
+    dependencyPullRequests.value = openPullRequests.filter(pull =>
+      (mode === 'all' || pull.user.login.toLowerCase().includes('dependabot')) && !excludedNumbers.includes(pull.number)
+    )
+    selectedDependencyPullNumbers.value = []
     dependencyPullRequestsLoaded.value = true
   } catch (error) {
     notify(errorMessage(error), 'error')
@@ -1096,93 +1223,73 @@ async function loadDependencyPullRequests() {
   }
 }
 
-async function readRepositoryJson(path: string) {
-  const repo = repository.value
-  if (!repo) throw new Error('No repository is selected.')
-  const encodedPath = path.split('/').map(encodeURIComponent).join('/')
-  const query = new URLSearchParams({ ref: repo.default_branch })
-  const { data } = await githubRequest<{ content?: string; encoding?: string }>(`/repos/${repo.full_name}/contents/${encodedPath}?${query}`)
-  if (!data.content || data.encoding !== 'base64') throw new Error(`Could not read ${path}.`)
-  return JSON.parse(decodeContent(data.content)) as Record<string, unknown>
+function toggleDependencyPullRequest(number: number) {
+  selectedDependencyPullNumbers.value = selectedDependencyPullNumbers.value.includes(number)
+    ? selectedDependencyPullNumbers.value.filter(selected => selected !== number)
+    : [...selectedDependencyPullNumbers.value, number]
 }
 
-async function checkOutdatedDependencies() {
+function toggleAllDependencyPullRequests() {
+  selectedDependencyPullNumbers.value = allDependencyPullRequestsSelected.value
+    ? []
+    : dependencyPullRequests.value.map(pull => pull.number)
+}
+
+async function updateSelectedDependencyPullRequests(action: 'close' | 'merge') {
   const repo = repository.value
-  if (!repo) return
-  const manifests = tree.value.filter(entry => entry.type === 'blob' && entry.path.split('/').pop() === 'package.json')
-  if (!manifests.length) {
-    notify('No npm package.json manifests were found.', 'info')
-    outdatedDependencies.value = []
-    dependencyScanComplete.value = true
+  if (!repo || dependencyPullRequestAction.value) return
+  const selected = dependencyPullRequests.value.filter(pull => selectedDependencyPullNumbers.value.includes(pull.number))
+  if (!selected.length) return
+  if (!token.value) {
+    showAuth.value = true
+    notify('Connect a GitHub account to update pull requests.', 'info')
     return
   }
 
-  scanningDependencies.value = true
-  dependencyScanComplete.value = false
-  outdatedDependencies.value = []
+  const confirmed = await requestConfirmation({
+    title: `${action === 'merge' ? 'Merge' : 'Close'} selected pull requests?`,
+    message: `${action === 'merge' ? 'Squash-merge' : 'Close'} ${selected.length} ${dependencyPullRequestMode.value === 'all' ? '' : 'Dependabot '}pull request${selected.length === 1 ? '' : 's'} in ${repo.full_name}?`,
+    confirmLabel: action === 'merge' ? 'Merge pull requests' : 'Close pull requests',
+    tone: action === 'merge' ? 'primary' : 'danger'
+  })
+  if (!confirmed) return
+
+  dependencyPullRequestAction.value = action
+  let succeeded = 0
+  const succeededPullNumbers: number[] = []
+  const failures: string[] = []
   try {
-    const candidates: Array<{ name: string; spec: string; manifestPath: string; lockPath?: string }> = []
-    const candidateKeys = new Set<string>()
-    for (const manifest of manifests) {
-      const packageData = await readRepositoryJson(manifest.path)
-      const directory = manifest.path.includes('/') ? manifest.path.slice(0, manifest.path.lastIndexOf('/') + 1) : ''
-      const localLock = `${directory}package-lock.json`
-      const rootLock = 'package-lock.json'
-      const lockPath = tree.value.some(entry => entry.type === 'blob' && entry.path === localLock)
-        ? localLock
-        : tree.value.some(entry => entry.type === 'blob' && entry.path === rootLock) ? rootLock : undefined
-      for (const section of ['dependencies', 'devDependencies', 'optionalDependencies']) {
-        const dependencies = packageData[section]
-        if (!dependencies || typeof dependencies !== 'object') continue
-        for (const [name, spec] of Object.entries(dependencies)) {
-          const key = `${manifest.path}:${name}`
-          if (typeof spec === 'string' && /^[~^]?v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(spec.trim()) && !candidateKeys.has(key)) {
-            candidateKeys.add(key)
-            candidates.push({ name, spec, manifestPath: manifest.path, lockPath })
-          }
+    for (const [index, pull] of selected.entries()) {
+      dependencyPullRequestProgress.value = `${action === 'merge' ? 'Merging' : 'Closing'} ${index + 1} of ${selected.length}…`
+      try {
+        if (action === 'close') {
+          await githubRequest(`/repos/${repo.full_name}/pulls/${pull.number}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ state: 'closed' })
+          })
+        } else {
+          const { data } = await githubRequest<{ merged: boolean; message?: string }>(`/repos/${repo.full_name}/pulls/${pull.number}/merge`, {
+            method: 'PUT',
+            body: JSON.stringify({ merge_method: 'squash', sha: pull.head.sha })
+          })
+          if (!data.merged) throw new Error(data.message || 'GitHub did not merge this pull request.')
         }
+        succeeded++
+        succeededPullNumbers.push(pull.number)
+        dependencyPullRequests.value = dependencyPullRequests.value.filter(item => item.number !== pull.number)
+        selectedDependencyPullNumbers.value = selectedDependencyPullNumbers.value.filter(number => number !== pull.number)
+      } catch (error) {
+        failures.push(`#${pull.number}: ${errorMessage(error)}`)
       }
     }
 
-    const lockCache = new Map<string, Promise<Record<string, unknown>>>()
-    const found: OutdatedDependency[] = []
-    for (let start = 0; start < candidates.length; start += 8) {
-      const batch = candidates.slice(start, start + 8)
-      await Promise.all(batch.map(async candidate => {
-        try {
-          let current = candidate.spec
-          let hasLockedVersion = false
-          if (candidate.lockPath) {
-            let lockRequest = lockCache.get(candidate.lockPath)
-            if (!lockRequest) {
-              lockRequest = readRepositoryJson(candidate.lockPath)
-              lockCache.set(candidate.lockPath, lockRequest)
-            }
-            const lock = await lockRequest
-            const packages = lock.packages as Record<string, { version?: string }> | undefined
-            const locked = packages?.[`node_modules/${candidate.name}`]?.version
-            if (locked) {
-              current = locked
-              hasLockedVersion = true
-            }
-          }
-          const registryUrl = `https://registry.npmjs.org/${encodeURIComponent(candidate.name)}/latest`
-          const response = await fetch(registryUrl, { headers: { Accept: 'application/vnd.npm.install-v1+json' } })
-          if (!response.ok) return
-          const latest = (await response.json() as { version?: string }).version
-          if (latest && versionIsNewer(latest, current) && (hasLockedVersion || !rangeAllowsVersion(candidate.spec, latest))) {
-            found.push({ name: candidate.name, current, latest, manifestPath: candidate.manifestPath })
-          }
-        } catch {}
-      }))
-    }
-    outdatedDependencies.value = found.sort((left, right) => left.name.localeCompare(right.name))
-    dependencyScanComplete.value = true
-    notify(`Checked npm dependencies. ${found.length} outdated package${found.length === 1 ? '' : 's'} found.`, 'success')
-  } catch (error) {
-    notify(errorMessage(error), 'error')
+    await loadDependencyPullRequests(dependencyPullRequestMode.value, succeededPullNumbers)
+    const resultMessage = `${succeeded} pull request${succeeded === 1 ? '' : 's'} ${action === 'merge' ? 'merged' : 'closed'}.`
+    if (failures.length) notify(`${resultMessage} ${failures.length} failed: ${failures[0]}`, succeeded ? 'info' : 'error')
+    else notify(resultMessage, 'success')
   } finally {
-    scanningDependencies.value = false
+    dependencyPullRequestProgress.value = ''
+    dependencyPullRequestAction.value = null
   }
 }
 
@@ -1279,7 +1386,7 @@ onMounted(() => { void restoreSavedSession() })
         </div>
         <div class="file-tree">
           <div v-for="item in visibleItems" :key="item.path" class="file-entry-row">
-            <input v-if="selectionMode" class="file-selection-checkbox" type="checkbox" :checked="selectedPaths.includes(item.path)" :aria-label="`Select ${item.path} for deletion`" @change="toggleSelectedPath(item.path)">
+            <UCheckbox v-if="selectionMode" class="file-selection-checkbox" size="sm" :model-value="selectedPaths.includes(item.path)" :aria-label="`Select ${item.path} for deletion`" @update:model-value="toggleSelectedPath(item.path)" />
             <button class="file-row" :class="{ selected: activeFile?.path === item.path || selectedPaths.includes(item.path) }" type="button" @click="item.type === 'dir' ? openFolder(item.path) : openFile(item)">
               <component :is="item.type === 'dir' ? Folder : fileIcon(item)" :size="15" :stroke-width="1.8" :class="item.type === 'dir' ? 'folder-icon' : 'file-icon'" />
               <span class="file-name" :title="item.name">{{ item.name }}</span>
@@ -1349,27 +1456,36 @@ onMounted(() => { void restoreSavedSession() })
             <section class="automation-panel" aria-labelledby="dependency-heading">
               <div class="automation-heading">
                 <div><span class="eyebrow">DEPENDENCIES</span><h2 id="dependency-heading">Scheduled updates</h2></div>
-                <span class="automation-count">{{ dependencyEcosystems.length }} ecosystems detected</span>
+                <span class="automation-count">{{ dependencyEcosystems.length }} weekly update rules</span>
               </div>
-              <p>Open a pull request to configure GitHub Dependabot. After it is merged, GitHub checks these manifests weekly and opens dependency update pull requests.</p>
+              <p v-if="dependencyEcosystems.length">Detected: {{ dependencyEcosystems.map(rule => `${rule.ecosystem} ${rule.directory}`).join(' · ') }}. Merge the config pull request to enable weekly update checks for these manifests.</p>
+              <p v-else>No supported dependency manifests found. Supported managers include npm, pip, Cargo, Go, Composer, and more.</p>
               <div class="automation-actions">
-                <button class="automation-button" type="button" :disabled="scanningDependencies" @click="checkOutdatedDependencies">
-                  <LoaderCircle v-if="scanningDependencies" class="spin" :size="14" /><span v-else>Scan npm dependencies</span>
-                </button>
                 <button class="automation-button primary" type="button" :disabled="configuringDependencies || !dependencyEcosystems.length || hasDependabotConfig" @click="enableDependencyUpdates">
-                  <LoaderCircle v-if="configuringDependencies" class="spin" :size="14" /><span v-else>{{ hasDependabotConfig ? 'Dependabot configured' : 'Configure Dependabot' }}</span>
+                  <LoaderCircle v-if="configuringDependencies" class="spin" :size="14" /><span v-else>{{ hasDependabotConfig ? 'Dependabot configured' : 'Configure weekly updates' }}</span>
                 </button>
-                <button class="automation-button" type="button" :disabled="loadingDependencyPullRequests" @click="loadDependencyPullRequests">
-                  <LoaderCircle v-if="loadingDependencyPullRequests" class="spin" :size="14" /><span v-else>Check open update PRs</span>
+                <button class="automation-button" type="button" :disabled="loadingDependencyPullRequests || dependencyPullRequestAction !== null" @click="loadDependencyPullRequests('dependabot')">
+                  <LoaderCircle v-if="loadingDependencyPullRequests" class="spin" :size="14" /><span v-else>Load Dependabot PRs</span>
                 </button>
-              </div>
-              <div v-if="dependencyScanComplete && !outdatedDependencies.length" class="automation-empty">No outdated npm dependencies found.</div>
-              <div v-for="dependency in outdatedDependencies" :key="`${dependency.manifestPath}:${dependency.name}`" class="dependency-result">
-                <span class="dependency-name">{{ dependency.name }}</span><span>{{ dependency.current }} <ChevronRight :size="12" /> {{ dependency.latest }}</span><small>{{ dependency.manifestPath }}</small>
+                <button class="automation-button" type="button" :disabled="loadingDependencyPullRequests || dependencyPullRequestAction !== null" @click="loadDependencyPullRequests('all')">
+                  <LoaderCircle v-if="loadingDependencyPullRequests" class="spin" :size="14" /><span v-else>Load all PRs</span>
+                </button>
               </div>
               <a v-if="createdPullRequest" class="automation-pr" :href="createdPullRequest.url" target="_blank" rel="noreferrer"><Check :size="14" /> {{ createdPullRequest.title }} <ExternalLink :size="12" /></a>
-              <div v-if="dependencyPullRequestsLoaded && !dependencyPullRequests.length" class="automation-empty">No open Dependabot pull requests.</div>
-              <a v-for="pull in dependencyPullRequests" :key="pull.number" class="automation-pr" :href="pull.html_url" target="_blank" rel="noreferrer"><span>#{{ pull.number }}</span>{{ pull.title }}<ExternalLink :size="12" /></a>
+              <div v-if="dependencyPullRequestsLoaded && !dependencyPullRequests.length" class="automation-empty">No open {{ dependencyPullRequestMode === 'all' ? '' : 'Dependabot ' }}pull requests.</div>
+              <template v-if="dependencyPullRequests.length">
+                <div class="dependency-selection-toolbar">
+                  <UCheckbox class="dependency-select-all" size="sm" label="Select all" :model-value="allDependencyPullRequestsSelected" @update:model-value="toggleAllDependencyPullRequests" />
+                  <span>{{ selectedDependencyPullNumbers.length }} selected</span>
+                  <button class="automation-button danger" type="button" :disabled="!selectedDependencyPullNumbers.length || dependencyPullRequestAction !== null" @click="updateSelectedDependencyPullRequests('close')">Close selected</button>
+                  <button class="automation-button primary" type="button" :disabled="!selectedDependencyPullNumbers.length || dependencyPullRequestAction !== null" @click="updateSelectedDependencyPullRequests('merge')">Merge selected</button>
+                </div>
+                <div v-if="dependencyPullRequestProgress" class="copy-progress"><LoaderCircle class="spin" :size="14" />{{ dependencyPullRequestProgress }}</div>
+                <div v-for="pull in dependencyPullRequests" :key="pull.number" class="dependency-pr-row">
+                  <UCheckbox class="dependency-pr-checkbox" size="sm" :model-value="selectedDependencyPullNumbers.includes(pull.number)" :aria-label="`Select pull request ${pull.number}`" @update:model-value="toggleDependencyPullRequest(pull.number)" />
+                  <a class="automation-pr" :href="pull.html_url" target="_blank" rel="noreferrer"><span>#{{ pull.number }}</span>{{ pull.title }}<ExternalLink :size="12" /></a>
+                </div>
+              </template>
             </section>
             <div v-if="copyProgress" class="copy-progress"><LoaderCircle class="spin" :size="14" />{{ copyProgress }}</div>
             <a v-if="copyUrl" class="fork-success" :href="copyUrl" target="_blank" rel="noreferrer"><Check :size="16" /> {{ copyLinkLabel }} <ExternalLink :size="13" /></a>
@@ -1380,35 +1496,79 @@ onMounted(() => { void restoreSavedSession() })
           </div>
 
           <div v-else class="file-preview">
-            <div class="preview-toolbar">
-              <div class="preview-file-title"><component :is="fileIcon(activeFile)" :size="17" /><span>{{ activeFile.path }}</span></div>
-              <div class="preview-toolbar-actions">
-                <button class="icon-button" type="button" title="Copy file path" aria-label="Copy file path" @click="copyPath(activeFile.path)"><Copy :size="15" /></button>
-                <a class="icon-button" :href="`https://github.com/${repository.full_name}/blob/${encodeURIComponent(repository.default_branch)}/${activeFile.path.split('/').map(encodeURIComponent).join('/')}`" target="_blank" rel="noreferrer" title="Open on GitHub"><ExternalLink :size="15" /></a>
-                <a class="download-action" :href="`https://raw.githubusercontent.com/${repository.full_name}/${encodeURIComponent(repository.default_branch)}/${activeFile.path.split('/').map(encodeURIComponent).join('/')}`" target="_blank" rel="noreferrer">Download</a>
+            <div v-if="fileKind === 'code' || (fileKind === 'html' && htmlPreviewMode === 'source')" class="source-file-card">
+              <div class="source-file-header">
+                <div class="source-file-identity">
+                  <span v-if="languageIconSvg" class="language-icon" :style="{ color: languageBrandColors[languageInfo.slug] || '#53657f' }" aria-hidden="true" v-html="languageIconSvg" />
+                  <span v-else class="language-mark">{{ languageInfo.mark }}</span>
+                  <strong :title="activeFile.path">{{ activeFile.name }}</strong>
+                  <span class="source-language-label">{{ languageInfo.label }}</span>
+                </div>
+                <div class="preview-toolbar-actions">
+                  <button class="icon-button" type="button" title="Copy file path" aria-label="Copy file path" @click="copyPath(activeFile.path)"><Copy :size="15" /></button>
+                  <a class="icon-button" :href="`https://github.com/${repository.full_name}/blob/${encodeURIComponent(repository.default_branch)}/${activeFile.path.split('/').map(encodeURIComponent).join('/')}`" target="_blank" rel="noreferrer" title="Open on GitHub"><ExternalLink :size="15" /></a>
+                  <a class="download-action" :href="`https://raw.githubusercontent.com/${repository.full_name}/${encodeURIComponent(repository.default_branch)}/${activeFile.path.split('/').map(encodeURIComponent).join('/')}`" target="_blank" rel="noreferrer">Download</a>
+                </div>
               </div>
+              <div class="source-file-meta">
+                <span>{{ formatBytes(activeFile.size) }}</span><span class="meta-separator">/</span><span>{{ repository.default_branch }}</span>
+              </div>
+              <div v-if="fileKind === 'html'" class="html-view-controls" role="group" aria-label="HTML preview mode">
+                <button type="button" :class="{ active: htmlPreviewMode === 'website' }" @click="htmlPreviewMode = 'website'"><Eye :size="14" /> Website</button>
+                <button type="button" :class="{ active: htmlPreviewMode === 'source' }" @click="htmlPreviewMode = 'source'"><Code2 :size="14" /> Source</button>
+              </div>
+              <div v-if="previewLoading" class="file-loading"><LoaderCircle class="spin" :size="23" /><span>Loading file…</span></div>
+              <div v-else-if="previewError" class="preview-message"><CircleAlert :size="19" /><span>{{ previewError }}</span></div>
+              <pre v-else-if="previewText" class="code-preview"><code v-if="highlightedCode" class="hljs" v-html="highlightedCode" /><code v-else>{{ previewText }}</code></pre>
+              <div v-else class="preview-message"><FileText :size="19" /><span>No preview is available for this file.</span></div>
             </div>
-            <div class="preview-submeta"><span>{{ formatBytes(activeFile.size) }}</span><span class="meta-separator">/</span><span>{{ fileKind === 'code' || fileKind === 'html' ? languageInfo.label : fileKind }}</span><span class="meta-separator">/</span><span>{{ repository.default_branch }}</span></div>
-            <div v-if="fileKind === 'html'" class="html-view-controls" role="group" aria-label="HTML preview mode">
-              <button type="button" :class="{ active: htmlPreviewMode === 'website' }" @click="htmlPreviewMode = 'website'"><Eye :size="14" /> Website</button>
-              <button type="button" :class="{ active: htmlPreviewMode === 'source' }" @click="htmlPreviewMode = 'source'"><Code2 :size="14" /> Source</button>
+
+            <div v-else>
+              <div class="preview-toolbar">
+                <div class="preview-file-title"><component :is="fileIcon(activeFile)" :size="17" /><span>{{ activeFile.path }}</span></div>
+                <div class="preview-toolbar-actions">
+                  <button class="icon-button" type="button" title="Copy file path" aria-label="Copy file path" @click="copyPath(activeFile.path)"><Copy :size="15" /></button>
+                  <a class="icon-button" :href="`https://github.com/${repository.full_name}/blob/${encodeURIComponent(repository.default_branch)}/${activeFile.path.split('/').map(encodeURIComponent).join('/')}`" target="_blank" rel="noreferrer" title="Open on GitHub"><ExternalLink :size="15" /></a>
+                  <a class="download-action" :href="`https://raw.githubusercontent.com/${repository.full_name}/${encodeURIComponent(repository.default_branch)}/${activeFile.path.split('/').map(encodeURIComponent).join('/')}`" target="_blank" rel="noreferrer">Download</a>
+                </div>
+              </div>
+              <div class="preview-submeta"><span>{{ formatBytes(activeFile.size) }}</span><span class="meta-separator">/</span><span>{{ fileKind }}</span><span class="meta-separator">/</span><span>{{ repository.default_branch }}</span></div>
+              <div v-if="fileKind === 'html'" class="html-view-controls" role="group" aria-label="HTML preview mode">
+                <button type="button" :class="{ active: htmlPreviewMode === 'website' }" @click="htmlPreviewMode = 'website'"><Eye :size="14" /> Website</button>
+                <button type="button" :class="{ active: htmlPreviewMode === 'source' }" @click="htmlPreviewMode = 'source'"><Code2 :size="14" /> Source</button>
+              </div>
+              <div v-if="fileKind === 'markdown'" class="language-banner">
+                <span v-if="languageIconSvg" class="language-icon" :style="{ color: languageBrandColors[languageInfo.slug] || '#53657f' }" aria-hidden="true" v-html="languageIconSvg" />
+                <span v-else class="language-mark">{{ languageInfo.mark }}</span>
+                <strong>{{ languageInfo.label }}</strong>
+              </div>
+              <div v-if="previewLoading" class="file-loading"><LoaderCircle class="spin" :size="23" /><span>Loading file…</span></div>
+              <div v-else-if="previewError" class="preview-message"><CircleAlert :size="19" /><span>{{ previewError }}</span></div>
+              <img v-else-if="previewImage" class="image-preview" :src="previewImage" :alt="activeFile.name">
+              <article v-else-if="fileKind === 'markdown' && previewHtml" class="markdown-preview" v-html="previewHtml" />
+              <iframe v-else-if="fileKind === 'html' && websiteDocument" class="website-preview" :srcdoc="websiteDocument" :title="`Website preview for ${activeFile.name}`" sandbox="allow-scripts allow-forms allow-popups allow-downloads allow-modals" referrerpolicy="no-referrer" />
+              <div v-else class="preview-message"><FileText :size="19" /><span>No preview is available for this file.</span></div>
             </div>
-            <div v-if="fileKind === 'code' || fileKind === 'markdown' || (fileKind === 'html' && htmlPreviewMode === 'source')" class="language-banner">
-              <span v-if="languageIconSvg" class="language-icon" :style="{ color: languageBrandColors[languageInfo.slug] || '#53657f' }" aria-hidden="true" v-html="languageIconSvg" />
-              <span v-else class="language-mark">{{ languageInfo.mark }}</span>
-              <strong>{{ languageInfo.label }}</strong><span class="language-banner-hint">{{ languageInfo.highlight ? 'Syntax highlighted' : 'Plain text' }}</span>
-            </div>
-            <div v-if="previewLoading" class="file-loading"><LoaderCircle class="spin" :size="23" /><span>Loading file…</span></div>
-            <div v-else-if="previewError" class="preview-message"><CircleAlert :size="19" /><span>{{ previewError }}</span></div>
-            <img v-else-if="previewImage" class="image-preview" :src="previewImage" :alt="activeFile.name">
-            <article v-else-if="fileKind === 'markdown' && previewHtml" class="markdown-preview" v-html="previewHtml" />
-            <iframe v-else-if="fileKind === 'html' && htmlPreviewMode === 'website' && websiteDocument" class="website-preview" :srcdoc="websiteDocument" :title="`Website preview for ${activeFile.name}`" sandbox="allow-scripts allow-forms allow-popups allow-downloads allow-modals" referrerpolicy="no-referrer" />
-            <pre v-else-if="previewText" class="code-preview"><code v-if="highlightedCode" class="hljs" v-html="highlightedCode" /><code v-else>{{ previewText }}</code></pre>
-            <div v-else class="preview-message"><FileText :size="19" /><span>No preview is available for this file.</span></div>
           </div>
         </template>
       </section>
     </main>
+
+    <div v-if="confirmation" class="confirmation-backdrop" @click.self="resolveConfirmation(false)" @keydown.esc.prevent.stop="resolveConfirmation(false)">
+      <section class="confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirmation-title" aria-describedby="confirmation-message">
+        <div class="confirmation-dialog-heading">
+          <span class="confirmation-icon" :class="confirmation.tone"><CircleAlert :size="19" /></span>
+          <button class="icon-button" type="button" aria-label="Cancel" @click="resolveConfirmation(false)"><X :size="17" /></button>
+        </div>
+        <span class="eyebrow">CONFIRM ACTION</span>
+        <h2 id="confirmation-title">{{ confirmation.title }}</h2>
+        <p id="confirmation-message">{{ confirmation.message }}</p>
+        <div class="confirmation-actions">
+          <button class="confirmation-cancel" type="button" autofocus @click="resolveConfirmation(false)">Cancel</button>
+          <button class="confirmation-submit" :class="confirmation.tone" type="button" @click="resolveConfirmation(true)">{{ confirmation.confirmLabel }}</button>
+        </div>
+      </section>
+    </div>
 
     <div v-if="showAuth" class="modal-backdrop" @click.self="showAuth = false">
       <section class="auth-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-heading">
