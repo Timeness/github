@@ -94,21 +94,79 @@ type GitHubUser = {
 }
 
 type Toast = { id: number; message: string; kind: 'success' | 'error' | 'info' }
-type ConfirmationRequest = { title: string; message: string; confirmLabel: string; tone: 'danger' | 'primary' }
+type ConfirmationRequest = { title: string; message: string; confirmLabel: string; tone: 'danger' | 'primary'; requiredText?: string }
 type DependencyPullRequest = { number: number; title: string; html_url: string; user: { login: string }; head: { sha: string } }
 
 type HighlightLanguageFactory = Parameters<typeof hljs.registerLanguage>[1]
-const highlightLanguageLoaders = import.meta.glob<Record<string, unknown>>('./node_modules/highlight.js/lib/languages/*.js')
-const highlightLanguagePath = (name: string) => `./node_modules/highlight.js/lib/languages/${name}.js`
+const highlightLanguageLoaders: Record<string, () => Promise<unknown>> = {
+  ada: () => import('highlight.js/lib/languages/ada'),
+  arduino: () => import('highlight.js/lib/languages/arduino'),
+  awk: () => import('highlight.js/lib/languages/awk'),
+  bash: () => import('highlight.js/lib/languages/bash'),
+  c: () => import('highlight.js/lib/languages/c'),
+  clojure: () => import('highlight.js/lib/languages/clojure'),
+  cpp: () => import('highlight.js/lib/languages/cpp'),
+  csharp: () => import('highlight.js/lib/languages/csharp'),
+  crystal: () => import('highlight.js/lib/languages/crystal'),
+  css: () => import('highlight.js/lib/languages/css'),
+  dart: () => import('highlight.js/lib/languages/dart'),
+  d: () => import('highlight.js/lib/languages/d'),
+  dockerfile: () => import('highlight.js/lib/languages/dockerfile'),
+  elm: () => import('highlight.js/lib/languages/elm'),
+  elixir: () => import('highlight.js/lib/languages/elixir'),
+  erlang: () => import('highlight.js/lib/languages/erlang'),
+  fortran: () => import('highlight.js/lib/languages/fortran'),
+  fsharp: () => import('highlight.js/lib/languages/fsharp'),
+  go: () => import('highlight.js/lib/languages/go'),
+  graphql: () => import('highlight.js/lib/languages/graphql'),
+  groovy: () => import('highlight.js/lib/languages/groovy'),
+  haskell: () => import('highlight.js/lib/languages/haskell'),
+  haxe: () => import('highlight.js/lib/languages/haxe'),
+  ini: () => import('highlight.js/lib/languages/ini'),
+  java: () => import('highlight.js/lib/languages/java'),
+  javascript: () => import('highlight.js/lib/languages/javascript'),
+  json: () => import('highlight.js/lib/languages/json'),
+  julia: () => import('highlight.js/lib/languages/julia'),
+  kotlin: () => import('highlight.js/lib/languages/kotlin'),
+  lisp: () => import('highlight.js/lib/languages/lisp'),
+  lua: () => import('highlight.js/lib/languages/lua'),
+  makefile: () => import('highlight.js/lib/languages/makefile'),
+  markdown: () => import('highlight.js/lib/languages/markdown'),
+  matlab: () => import('highlight.js/lib/languages/matlab'),
+  nix: () => import('highlight.js/lib/languages/nix'),
+  nim: () => import('highlight.js/lib/languages/nim'),
+  objectivec: () => import('highlight.js/lib/languages/objectivec'),
+  ocaml: () => import('highlight.js/lib/languages/ocaml'),
+  perl: () => import('highlight.js/lib/languages/perl'),
+  php: () => import('highlight.js/lib/languages/php'),
+  powershell: () => import('highlight.js/lib/languages/powershell'),
+  prolog: () => import('highlight.js/lib/languages/prolog'),
+  python: () => import('highlight.js/lib/languages/python'),
+  r: () => import('highlight.js/lib/languages/r'),
+  ruby: () => import('highlight.js/lib/languages/ruby'),
+  rust: () => import('highlight.js/lib/languages/rust'),
+  scala: () => import('highlight.js/lib/languages/scala'),
+  scheme: () => import('highlight.js/lib/languages/scheme'),
+  scss: () => import('highlight.js/lib/languages/scss'),
+  shell: () => import('highlight.js/lib/languages/shell'),
+  sql: () => import('highlight.js/lib/languages/sql'),
+  swift: () => import('highlight.js/lib/languages/swift'),
+  typescript: () => import('highlight.js/lib/languages/typescript'),
+  vala: () => import('highlight.js/lib/languages/vala'),
+  verilog: () => import('highlight.js/lib/languages/verilog'),
+  vhdl: () => import('highlight.js/lib/languages/vhdl'),
+  wasm: () => import('highlight.js/lib/languages/wasm'),
+  xml: () => import('highlight.js/lib/languages/xml'),
+  x86asm: () => import('highlight.js/lib/languages/x86asm'),
+  yaml: () => import('highlight.js/lib/languages/yaml')
+}
 
 async function loadHighlightLanguage(name: string) {
   if (hljs.getLanguage(name)) return true
-  const loader = highlightLanguageLoaders[highlightLanguagePath(name)]
+  const loader = highlightLanguageLoaders[name]
   if (!loader) return false
-  const module = await loader()
-  const factory = (typeof module.default === 'function'
-    ? module.default
-    : Object.values(module).find(value => typeof value === 'function')) as HighlightLanguageFactory | undefined
+  const module = await loader() as Record<string, unknown>
+  const factory = (typeof module.default === 'function' ? module.default : Object.values(module).find(value => typeof value === 'function')) as HighlightLanguageFactory | undefined
   if (!factory) return false
   hljs.registerLanguage(name, factory)
   return true
@@ -133,6 +191,7 @@ const copyingRepository = ref(false)
 const selectionMode = ref(false)
 const selectedPaths = ref<string[]>([])
 const deletingFiles = ref(false)
+const deletingRepository = ref(false)
 const configuringDependencies = ref(false)
 const loadingDependencyPullRequests = ref(false)
 const dependencyPullRequestsLoaded = ref(false)
@@ -158,6 +217,7 @@ const showRepositoryPicker = ref(false)
 const repositorySearch = ref('')
 const toasts = ref<Toast[]>([])
 const confirmation = shallowRef<ConfirmationRequest | null>(null)
+const confirmationText = ref('')
 const rateLimit = ref('GitHub API ready')
 let settleConfirmation: ((confirmed: boolean) => void) | null = null
 let toastId = 0
@@ -381,7 +441,7 @@ const fileKind = computed(() => {
   if (/\.html?$/.test(name)) return 'html'
   const extension = name.includes('.') ? name.split('.').pop() || '' : name
   if (extension === 'wasm') return 'binary'
-  if (languageMap[extension] || highlightLanguageLoaders[highlightLanguagePath(extension)]) return 'code'
+  if (languageMap[extension] || highlightLanguageLoaders[extension]) return 'code'
   if (/\.(txt|log|csv|gitignore|ya?ml|toml|xml|json|ini|cfg|conf|properties)$/.test(name)) return 'code'
   return 'binary'
 })
@@ -526,7 +586,7 @@ const languageInfo = computed<LanguageInfo>(() => {
     label: extension ? extension.toUpperCase() : 'Plain text',
     mark: extension ? extension.slice(0, 4).toUpperCase() : 'TXT',
     slug: extension,
-    highlight: highlightLanguageLoaders[highlightLanguagePath(extension)] ? extension : null
+    highlight: highlightLanguageLoaders[extension] ? extension : null
   }
 })
 
@@ -610,6 +670,7 @@ function requestConfirmation(request: ConfirmationRequest) {
   if (settleConfirmation) return Promise.resolve(false)
   return new Promise<boolean>(resolve => {
     settleConfirmation = resolve
+    confirmationText.value = ''
     confirmation.value = request
   })
 }
@@ -618,6 +679,7 @@ function resolveConfirmation(confirmed: boolean) {
   const settle = settleConfirmation
   settleConfirmation = null
   confirmation.value = null
+  confirmationText.value = ''
   settle?.(confirmed)
 }
 
@@ -1116,6 +1178,19 @@ function toggleSelectedPath(path: string) {
     : [...selectedPaths.value, path]
 }
 
+function selectedRepositoryFiles() {
+  const files = new Set<string>()
+  for (const path of selectedPaths.value) {
+    const isDirectory = tree.value.some(entry => entry.path === path && entry.type === 'tree')
+    if (isDirectory) {
+      for (const entry of tree.value) if (entry.type === 'blob' && entry.path.startsWith(`${path}/`)) files.add(entry.path)
+    } else if (tree.value.some(entry => entry.type === 'blob' && entry.path === path)) {
+      files.add(path)
+    }
+  }
+  return [...files]
+}
+
 async function deleteSelectedPaths() {
   const repo = repository.value
   if (!repo || !selectedPaths.value.length) return
@@ -1124,24 +1199,14 @@ async function deleteSelectedPaths() {
     notify('Connect a GitHub account to create a deletion pull request.', 'info')
     return
   }
-
-  const selected = [...selectedPaths.value]
-  const files = new Set<string>()
-  for (const path of selected) {
-    const isDirectory = tree.value.some(entry => entry.path === path && entry.type === 'tree')
-    if (isDirectory) {
-      for (const entry of tree.value) if (entry.type === 'blob' && entry.path.startsWith(`${path}/`)) files.add(entry.path)
-    } else if (tree.value.some(entry => entry.type === 'blob' && entry.path === path)) {
-      files.add(path)
-    }
-  }
-  if (!files.size) {
+  const files = selectedRepositoryFiles()
+  if (!files.length) {
     notify('The selection contains no files to delete.', 'error')
     return
   }
   const confirmed = await requestConfirmation({
     title: 'Create deletion pull request?',
-    message: `This will propose deleting ${files.size} selected file${files.size === 1 ? '' : 's'} from ${repo.full_name}. The repository will not change unless the pull request is merged.`,
+    message: `This will propose deleting ${files.length} selected file${files.length === 1 ? '' : 's'} from ${repo.full_name}. The repository will not change unless the pull request is merged.`,
     confirmLabel: 'Create pull request',
     tone: 'danger'
   })
@@ -1149,8 +1214,8 @@ async function deleteSelectedPaths() {
 
   deletingFiles.value = true
   try {
-    const changes = [...files].map(path => ({ path, remove: true }))
-    await createChangePullRequest(`Delete ${files.size} selected file${files.size === 1 ? '' : 's'}`, `Bulk deletion requested in GitView. Review the file changes before merging.\n\nDeleted files: ${files.size}`, changes)
+    const changes = files.map(path => ({ path, remove: true }))
+    await createChangePullRequest(`Delete ${files.length} selected file${files.length === 1 ? '' : 's'}`, `Bulk deletion requested in GitView. Review the file changes before merging.\n\nDeleted files: ${files.length}`, changes)
     selectedPaths.value = []
     selectionMode.value = false
     activeFile.value = null
@@ -1159,6 +1224,109 @@ async function deleteSelectedPaths() {
     notify(errorMessage(error), 'error')
   } finally {
     deletingFiles.value = false
+  }
+}
+
+async function permanentlyDeleteSelectedFiles() {
+  const repo = repository.value
+  if (!repo || !selectedPaths.value.length || deletingFiles.value) return
+  if (!user.value || !token.value) {
+    showAuth.value = true
+    notify('Connect a GitHub account to delete repository files.', 'info')
+    return
+  }
+
+  const files = selectedRepositoryFiles()
+  if (!files.length) {
+    notify('The selection contains no files to delete.', 'error')
+    return
+  }
+  const confirmed = await requestConfirmation({
+    title: 'Delete selected files permanently?',
+    message: `This will commit deletion of ${files.length} selected file${files.length === 1 ? '' : 's'} from ${repo.full_name} directly to its default branch. This cannot be undone from GitView. Type the repository name to continue.`,
+    confirmLabel: 'Delete files permanently',
+    tone: 'danger',
+    requiredText: repo.full_name
+  })
+  if (!confirmed) return
+
+  deletingFiles.value = true
+  try {
+    const branchName = repo.default_branch.split('/').map(encodeURIComponent).join('/')
+    const { data: branch } = await githubRequest<{ commit: { sha: string; commit: { tree: { sha: string } } } }>(`/repos/${repo.full_name}/branches/${branchName}`)
+    const deletions = files.map(path => ({
+      path,
+      mode: tree.value.find(entry => entry.type === 'blob' && entry.path === path)?.mode || '100644',
+      type: 'blob',
+      sha: null
+    }))
+    const { data: updatedTree } = await githubRequest<{ sha: string }>(`/repos/${repo.full_name}/git/trees`, {
+      method: 'POST',
+      body: JSON.stringify({ base_tree: branch.commit.commit.tree.sha, tree: deletions })
+    })
+    const { data: commit } = await githubRequest<{ sha: string }>(`/repos/${repo.full_name}/git/commits`, {
+      method: 'POST',
+      body: JSON.stringify({ message: `Delete ${files.length} selected file${files.length === 1 ? '' : 's'}`, tree: updatedTree.sha, parents: [branch.commit.sha] })
+    })
+    await githubRequest(`/repos/${repo.full_name}/git/refs/heads/${branchName}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ sha: commit.sha })
+    })
+    selectionMode.value = false
+    selectedPaths.value = []
+    activeFile.value = null
+    await loadRepository(repo.html_url)
+    notify(`${files.length} file${files.length === 1 ? '' : 's'} deleted from ${repo.default_branch}.`, 'success')
+  } catch (error) {
+    notify(errorMessage(error), 'error')
+  } finally {
+    deletingFiles.value = false
+  }
+}
+
+async function deleteRepository() {
+  const repo = repository.value
+  if (!repo || deletingRepository.value) return
+  if (!user.value || !token.value) {
+    showAuth.value = true
+    notify('Sign in with a GitHub token to delete a repository.', 'info')
+    return
+  }
+  if (repo.owner.login.toLowerCase() !== user.value.login.toLowerCase()) {
+    notify('Only the repository owner can delete this repository.', 'error')
+    return
+  }
+
+  const confirmed = await requestConfirmation({
+    title: 'Permanently delete this repository?',
+    message: `This permanently deletes ${repo.full_name}, including all files, branches, issues, and pull requests. This cannot be undone. Type the repository name below to continue.`,
+    confirmLabel: 'Delete repository',
+    tone: 'danger',
+    requiredText: repo.full_name
+  })
+  if (!confirmed) return
+
+  deletingRepository.value = true
+  try {
+    const path = repo.full_name.split('/').map(encodeURIComponent).join('/')
+    await githubRequest(`/repos/${path}`, { method: 'DELETE' })
+    repository.value = null
+    tree.value = []
+    repositoryUrl.value = ''
+    currentPath.value = ''
+    activeFile.value = null
+    selectedPaths.value = []
+    selectionMode.value = false
+    previewText.value = ''
+    previewHtml.value = ''
+    previewImage.value = ''
+    websiteDocument.value = ''
+    await loadUserRepositories()
+    notify(`${repo.full_name} was permanently deleted.`, 'success')
+  } catch (error) {
+    notify(errorMessage(error), 'error')
+  } finally {
+    deletingRepository.value = false
   }
 }
 
@@ -1317,6 +1485,17 @@ function copyPath(path: string) {
   void navigator.clipboard.writeText(path).then(() => notify('Path copied.', 'success'))
 }
 
+async function copyConfirmationText() {
+  const value = confirmation.value?.requiredText
+  if (!value) return
+  try {
+    await navigator.clipboard.writeText(value)
+    notify(`${value} copied.`, 'success')
+  } catch (error) {
+    notify(`Could not copy repository name: ${errorMessage(error)}`, 'error')
+  }
+}
+
 onMounted(() => { void restoreSavedSession() })
 </script>
 
@@ -1382,7 +1561,10 @@ onMounted(() => { void restoreSavedSession() })
         </nav>
         <div v-if="selectionMode" class="bulk-toolbar">
           <span>{{ selectedPaths.length }} selected</span>
-          <button type="button" :disabled="!selectedPaths.length || deletingFiles" @click="deleteSelectedPaths">{{ deletingFiles ? 'Preparing PR…' : 'Create delete PR' }}</button>
+          <div class="bulk-toolbar-actions">
+            <button type="button" :disabled="!selectedPaths.length || deletingFiles" @click="deleteSelectedPaths">Create delete PR</button>
+            <button type="button" class="permanent-delete-button" :disabled="!selectedPaths.length || deletingFiles" @click="permanentlyDeleteSelectedFiles">Delete now</button>
+          </div>
         </div>
         <div class="file-tree">
           <div v-for="item in visibleItems" :key="item.path" class="file-entry-row">
@@ -1402,15 +1584,15 @@ onMounted(() => { void restoreSavedSession() })
       <section class="preview-area">
         <div v-if="!repository && !loadingRepository" class="welcome-view">
           <div class="welcome-copy">
-            <div class="eyebrow"><span class="eyebrow-line" /> GITHUB REPOSITORY TOOLS</div>
-            <h1>See the whole<br><span>repository.</span></h1>
-            <p>Browse repositories, inspect files, and create an independent copy in your GitHub account.</p>
+            <div class="eyebrow"><span class="eyebrow-line" /> YOUR GITHUB WORKSPACE</div>
+            <h1>Find your next<br><span>repository.</span></h1>
+            <p>Browse code, manage dependency updates, and create independent repository copies from one focused workspace.</p>
             <form class="welcome-search" @submit.prevent="loadRepository()">
               <GitHubMark :size="17" />
-              <input v-model="repositoryUrl" aria-label="GitHub repository URL" placeholder="github.com/owner/repository" spellcheck="false">
+              <input v-model="repositoryUrl" aria-label="GitHub repository URL" placeholder="Paste a GitHub repository URL" spellcheck="false">
               <button type="submit" :disabled="loadingRepository"><LoaderCircle v-if="loadingRepository" class="spin" :size="16" /><span v-else>Explore <ChevronRight :size="15" /></span></button>
             </form>
-            <div class="welcome-footnote"><ShieldCheck :size="15" /> Public repositories work without sign in. Copying requires your GitHub token.</div>
+            <div class="welcome-footnote"><ShieldCheck :size="15" /> Explore public repositories instantly. Sign in to manage private repos and repository actions.</div>
           </div>
           <div class="welcome-art" aria-hidden="true">
             <div class="art-window">
@@ -1450,6 +1632,11 @@ onMounted(() => { void restoreSavedSession() })
                 <LoaderCircle v-if="forkingRepository" class="spin" :size="16" />
                 <GitFork v-else :size="16" />
                 {{ forkingRepository ? 'Forking…' : 'Create a fork' }}
+              </button>
+              <button v-if="user && user.login.toLowerCase() === repository.owner.login.toLowerCase()" class="delete-repo-button" type="button" :disabled="deletingRepository" @click="deleteRepository">
+                <LoaderCircle v-if="deletingRepository" class="spin" :size="15" />
+                <X v-else :size="15" />
+                {{ deletingRepository ? 'Deleting repository…' : 'Delete repository' }}
               </button>
               <a class="secondary-action" :href="repository.html_url" target="_blank" rel="noreferrer">View on GitHub <ExternalLink :size="14" /></a>
             </div>
@@ -1563,9 +1750,14 @@ onMounted(() => { void restoreSavedSession() })
         <span class="eyebrow">CONFIRM ACTION</span>
         <h2 id="confirmation-title">{{ confirmation.title }}</h2>
         <p id="confirmation-message">{{ confirmation.message }}</p>
+        <label v-if="confirmation.requiredText" class="confirmation-input-label" for="confirmation-text">
+          <span>Type <strong>{{ confirmation.requiredText }}</strong> to confirm</span>
+          <button class="confirmation-copy-button" type="button" :title="`Copy ${confirmation.requiredText}`" :aria-label="`Copy ${confirmation.requiredText}`" @click="copyConfirmationText"><Copy :size="13" /></button>
+        </label>
+        <input v-if="confirmation.requiredText" id="confirmation-text" v-model="confirmationText" class="confirmation-text-input" :placeholder="confirmation.requiredText" autocomplete="off" spellcheck="false">
         <div class="confirmation-actions">
           <button class="confirmation-cancel" type="button" autofocus @click="resolveConfirmation(false)">Cancel</button>
-          <button class="confirmation-submit" :class="confirmation.tone" type="button" @click="resolveConfirmation(true)">{{ confirmation.confirmLabel }}</button>
+          <button class="confirmation-submit" :class="confirmation.tone" type="button" :disabled="!!confirmation.requiredText && confirmationText !== confirmation.requiredText" @click="resolveConfirmation(true)">{{ confirmation.confirmLabel }}</button>
         </div>
       </section>
     </div>
