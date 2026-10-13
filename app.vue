@@ -147,6 +147,131 @@ const rateLimit = ref('GitHub API ready')
 let toastId = 0
 
 const apiBase = 'https://api.github.com'
+const savedTokenStorageKey = 'gitview.github-token.v1'
+const tokenKeyDatabase = 'gitview-auth'
+const tokenKeyStore = 'keys'
+const tokenKeyId = 'github-token'
+
+type EncryptedToken = { version: 1; iv: string; ciphertext: string }
+
+function openTokenKeyDatabase() {
+  return new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open(tokenKeyDatabase, 1)
+    request.onupgradeneeded = () => request.result.createObjectStore(tokenKeyStore)
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error || new Error('Could not open secure token storage.'))
+  })
+}
+
+async function getTokenEncryptionKey() {
+  const database = await openTokenKeyDatabase()
+  try {
+    const request = database.transaction(tokenKeyStore, 'readonly').objectStore(tokenKeyStore).get(tokenKeyId)
+    return await new Promise<CryptoKey | undefined>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result as CryptoKey | undefined)
+      request.onerror = () => reject(request.error || new Error('Could not read the token encryption key.'))
+    })
+  } finally {
+    database.close()
+  }
+}
+
+async function putTokenEncryptionKey(key: CryptoKey) {
+  const database = await openTokenKeyDatabase()
+  try {
+    const transaction = database.transaction(tokenKeyStore, 'readwrite')
+    transaction.objectStore(tokenKeyStore).put(key, tokenKeyId)
+    await new Promise<void>((resolve, reject) => {
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error || new Error('Could not save the token encryption key.'))
+      transaction.onabort = () => reject(transaction.error || new Error('Saving the token encryption key was cancelled.'))
+    })
+  } finally {
+    database.close()
+  }
+}
+
+async function deleteTokenEncryptionKey() {
+  const database = await openTokenKeyDatabase()
+  try {
+    const transaction = database.transaction(tokenKeyStore, 'readwrite')
+    transaction.objectStore(tokenKeyStore).delete(tokenKeyId)
+    await new Promise<void>((resolve, reject) => {
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error || new Error('Could not remove the token encryption key.'))
+      transaction.onabort = () => reject(transaction.error || new Error('Removing the token encryption key was cancelled.'))
+    })
+  } finally {
+    database.close()
+  }
+}
+
+function encodeBase64(bytes: Uint8Array) {
+  return btoa(Array.from(bytes, byte => String.fromCharCode(byte)).join(''))
+}
+
+function decodeBase64(value: string) {
+  return Uint8Array.from(atob(value), character => character.charCodeAt(0))
+}
+
+async function saveEncryptedToken(tokenValue: string) {
+  if (!globalThis.crypto?.subtle) throw new Error('Encrypted login storage requires a secure browser context (HTTPS or localhost).')
+  const key = await globalThis.crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
+  await putTokenEncryptionKey(key)
+  const iv = globalThis.crypto.getRandomValues(new Uint8Array(12))
+  const ciphertext = await globalThis.crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(tokenValue))
+  const record: EncryptedToken = { version: 1, iv: encodeBase64(iv), ciphertext: encodeBase64(new Uint8Array(ciphertext)) }
+  localStorage.setItem(savedTokenStorageKey, JSON.stringify(record))
+}
+
+async function readSavedToken() {
+  const stored = localStorage.getItem(savedTokenStorageKey)
+  if (!stored) return null
+  if (!globalThis.crypto?.subtle) throw new Error('Encrypted login storage requires a secure browser context (HTTPS or localhost).')
+
+  const record = JSON.parse(stored) as EncryptedToken
+  if (record.version !== 1 || !record.iv || !record.ciphertext) throw new Error('Saved login data is invalid.')
+  const key = await getTokenEncryptionKey()
+  if (!key) throw new Error('Saved login encryption key is missing.')
+  const plaintext = await globalThis.crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: decodeBase64(record.iv) },
+    key,
+    decodeBase64(record.ciphertext)
+  )
+  return new TextDecoder().decode(plaintext)
+}
+
+async function removeSavedToken() {
+  localStorage.removeItem(savedTokenStorageKey)
+  await deleteTokenEncryptionKey()
+}
+
+async function restoreSavedSession() {
+  let savedToken: string | null
+  try {
+    savedToken = await readSavedToken()
+  } catch (error) {
+    try { await removeSavedToken() } catch {}
+    notify(`Saved login could not be decrypted: ${errorMessage(error)} Sign in again.`, 'error')
+    return
+  }
+  if (!savedToken) return
+
+  token.value = savedToken
+  try {
+    const { data: account } = await githubRequest<GitHubUser>('/user')
+    user.value = account
+    await loadUserRepositories()
+  } catch (error) {
+    token.value = ''
+    if (errorMessage(error).includes('GitHub rejected this token')) {
+      try { await removeSavedToken() } catch {}
+      notify('Saved GitHub token is no longer valid. Sign in again.', 'error')
+    } else {
+      notify(`Could not restore your GitHub session: ${errorMessage(error)}`, 'error')
+    }
+  }
+}
 
 const visibleItems = computed<ExplorerItem[]>(() => {
   if (!repository.value) return []
@@ -233,6 +358,7 @@ const dependabotConfig = computed(() => [
 const fileKind = computed(() => {
   const name = activeFile.value?.name.toLowerCase() || ''
   if (/\.(png|jpe?g|gif|webp|svg|ico|avif)$/.test(name)) return 'image'
+  if (/^\.env(?:\.|$)/.test(name)) return 'code'
   if (/\.(md|markdown)$/.test(name) || ['readme', 'changelog'].includes(name)) return 'markdown'
   if (/\.html?$/.test(name)) return 'html'
   if (['dockerfile', 'makefile'].includes(name)) return 'code'
@@ -622,10 +748,22 @@ async function signIn() {
   token.value = providedToken
   try {
     const { data: account } = await githubRequest<GitHubUser>('/user')
+    let remembered = false
+    let storageError = ''
+    try {
+      await saveEncryptedToken(providedToken)
+      remembered = true
+    } catch (error) {
+      storageError = errorMessage(error)
+      try { await removeSavedToken() } catch {}
+    }
     user.value = account
     tokenInput.value = ''
     showAuth.value = false
-    notify(`Connected as ${account.login}. The token stays in this browser session only.`, 'success')
+    notify(remembered
+      ? `Connected as ${account.login}. This browser will remember you until you sign out.`
+      : `Connected as ${account.login}, but this browser could not save the encrypted session: ${storageError}`,
+    remembered ? 'success' : 'info')
     void loadUserRepositories()
   } catch (error) {
     token.value = previousToken
@@ -664,10 +802,16 @@ async function refreshGitHubProfile() {
   }
 }
 
-function signOut() {
+async function signOut() {
   token.value = ''
   user.value = null
   userRepositories.value = []
+  try {
+    await removeSavedToken()
+  } catch (error) {
+    notify(`Signed out, but browser encryption-key cleanup failed: ${errorMessage(error)}`, 'error')
+    return
+  }
   notify('Signed out. Public repository browsing is still available.', 'info')
 }
 
@@ -1065,6 +1209,8 @@ function formatBytes(bytes: number) {
 function copyPath(path: string) {
   void navigator.clipboard.writeText(path).then(() => notify('Path copied.', 'success'))
 }
+
+onMounted(() => { void restoreSavedSession() })
 </script>
 
 <template>
@@ -1268,14 +1414,14 @@ function copyPath(path: string) {
       <section class="auth-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-heading">
         <div class="dialog-heading"><div class="dialog-mark"><GitHubMark :size="20" /></div><button class="icon-button" type="button" aria-label="Close" @click="showAuth = false"><X :size="18" /></button></div>
         <h2 id="auth-heading">Connect your GitHub</h2>
-        <p class="dialog-copy">Use a personal access token to create repositories, browse private repositories, and manage files. Your token is sent directly to GitHub and held in memory only.</p>
+        <p class="dialog-copy">Use a personal access token to create repositories, browse private repositories, and manage files. The token is encrypted in this browser and restored until you sign out.</p>
         <form class="auth-form" @submit.prevent="signIn">
           <label for="github-token">Personal access token</label>
           <input id="github-token" v-model="tokenInput" type="password" autocomplete="off" placeholder="github_pat_…">
           <span class="input-hint">Grant repository read/write access and repository creation permission. <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">Create one <ExternalLink :size="12" /></a></span>
           <button class="copy-repo-button auth-submit" type="submit"><ShieldCheck :size="16" /> Connect securely</button>
         </form>
-        <div class="security-note"><ShieldCheck :size="15" /><span>GitView has no server-side token storage. Signing out clears the token immediately.</span></div>
+        <div class="security-note"><ShieldCheck :size="15" /><span>The encrypted token is stored in local storage and its non-exportable key in IndexedDB. Sign out removes both. This protects against casual storage inspection, not malicious scripts running in this browser.</span></div>
       </section>
     </div>
 
