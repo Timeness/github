@@ -1502,7 +1502,7 @@ onMounted(() => { void restoreSavedSession() })
 <template>
   <div class="app-shell">
     <header class="topbar">
-      <a class="brand" href="#" aria-label="GitView home" @click.prevent="repository ? openFolder('') : undefined">
+      <a class="brand" href="/" aria-label="GitView home" @click.prevent="repository ? openFolder('') : undefined">
         <span class="brand-mark"><GitHubMark :size="19" /></span>
         <span>GitView</span><span class="brand-tag">EXPLORER</span>
       </a>
@@ -1604,7 +1604,7 @@ onMounted(() => { void restoreSavedSession() })
               <div class="art-line"><FileImage :size="15" /><b>package.json</b><span>1.2 KB</span></div>
               <div class="art-foot"><span class="status-dot" /> 142 files indexed</div>
             </div>
-            <div class="art-stamp"><HardDrive :size="16" /><span>INDEPENDENT<br>REPO COPY</span></div>
+            <div class="art-stamp"><HardDrive :size="16" /><span>INDEPENDENT<br>REPO</span></div>
           </div>
         </div>
 
