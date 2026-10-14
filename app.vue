@@ -1769,7 +1769,7 @@ onMounted(() => { void restoreSavedSession() })
         <p class="dialog-copy">Use a personal access token to create repositories, browse private repositories, and manage files. The token is encrypted in this browser and restored until you sign out.</p>
         <form class="auth-form" @submit.prevent="signIn">
           <label for="github-token">Personal access token</label>
-          <input id="github-token" v-model="tokenInput" type="password" autocomplete="off" placeholder="github_pat_…">
+          <input id="github-token" v-model="tokenInput" type="password" autocomplete="off" placeholder="gh_....">
           <span class="input-hint">Grant repository read/write access and repository creation permission. <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">Create one <ExternalLink :size="12" /></a></span>
           <button class="copy-repo-button auth-submit" type="submit"><ShieldCheck :size="16" /> Connect securely</button>
         </form>
