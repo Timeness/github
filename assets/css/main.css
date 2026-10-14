@@ -351,3 +351,66 @@ a { color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* Welcome page: brighter, more spacious light theme. */
+.preview-area:has(.welcome-view) {
+  background:
+    radial-gradient(ellipse at 83% 46%, rgba(220, 234, 255, .72), transparent 36%),
+    radial-gradient(ellipse at 18% 80%, rgba(229, 242, 255, .52), transparent 32%),
+    #f8faff;
+}
+.welcome-view {
+  width: min(1180px, calc(100% - 96px));
+  min-height: calc(100dvh - 72px);
+  grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr);
+  gap: clamp(48px, 8vw, 112px);
+  padding: 54px 0 72px;
+}
+.welcome-copy { max-width: 520px; }
+.eyebrow { gap: 10px; color: #55708f; font-size: 9px; letter-spacing: .16em; }
+.eyebrow-line { width: 28px; height: 2px; border-radius: 4px; background: linear-gradient(90deg, #3679ff, #75a4ff); }
+.welcome-copy h1 { margin: 25px 0 18px; color: #14243b; font-size: clamp(52px, 5.25vw, 72px); letter-spacing: -.055em; line-height: .99; }
+.welcome-copy h1 span { color: #3474ef; }
+.welcome-copy > p { max-width: 440px; color: #60748f; font-size: 15px; line-height: 1.8; }
+.welcome-search { height: 60px; gap: 12px; margin-top: 30px; padding: 6px 6px 6px 16px; border-color: #d7e2f1; border-radius: 11px; box-shadow: 0 12px 30px rgba(41, 71, 112, .08), 0 2px 5px rgba(41, 71, 112, .04); }
+.welcome-search:focus-within { border-color: #8eb3ff; box-shadow: 0 0 0 4px rgba(52, 116, 239, .1), 0 12px 30px rgba(41, 71, 112, .08); }
+.welcome-search > svg { color: #8395ad; }
+.welcome-search input { font-size: 12.5px; }
+.welcome-search button { min-width: 98px; height: 46px; border-radius: 8px; background: linear-gradient(135deg, #3476f6, #2861df); box-shadow: 0 4px 10px rgba(39, 99, 224, .2); }
+.welcome-search button:hover { background: #205bd9; box-shadow: 0 6px 14px rgba(39, 99, 224, .24); }
+.welcome-footnote { align-items: flex-start; gap: 8px; margin-top: 17px; color: #71839b; font-size: 10.5px; line-height: 1.6; }
+.welcome-footnote svg { flex: 0 0 auto; margin-top: 1px; color: #15966b; }
+.welcome-art { padding: 25px 29px 27px 10px; perspective: 1000px; }
+.welcome-art::before { inset: -14px 0 0 52px; border-color: #dce6f3; border-radius: 15px; background-color: rgba(255,255,255,.34); background-image: radial-gradient(rgba(112, 143, 184, .15) .8px, transparent .8px); background-size: 18px 18px; }
+.art-window { border-color: #dce5f0; border-radius: 12px; box-shadow: 0 28px 70px rgba(36, 62, 99, .14), 0 5px 14px rgba(36, 62, 99, .06); transform: rotateY(-3deg) rotateX(1deg); transition: transform .35s ease, box-shadow .35s ease; }
+.welcome-art:hover .art-window { transform: rotateY(0) translateY(-3px); box-shadow: 0 34px 78px rgba(36, 62, 99, .17), 0 6px 16px rgba(36, 62, 99, .07); }
+.art-window-bar { height: 44px; padding: 0 15px; background: linear-gradient(#fff, #fcfdff); }
+.art-window-bar i { width: 8px; height: 8px; }
+.art-window-bar span { margin-left: 11px; font-size: 9.5px; }
+.art-line { height: 43px; padding: 0 17px; }
+.art-line b { font-size: 11.5px; }
+.art-line.nested { padding-left: 43px; }
+.art-foot { height: 36px; padding: 0 16px; background: #fbfcfe; }
+.art-stamp { right: -3px; bottom: 0; width: 91px; height: 91px; gap: 6px; background: linear-gradient(145deg, #20a77b, #118362); border-width: 5px; box-shadow: 0 10px 24px rgba(16, 95, 66, .22); }
+
+@media (max-width: 800px) {
+  .welcome-view { width: min(620px, calc(100% - 48px)); min-height: 0; gap: 44px; padding: 58px 0 64px; }
+  .welcome-copy h1 { font-size: clamp(50px, 10vw, 66px); }
+  .welcome-art { width: min(500px, 100%); }
+}
+@media (max-width: 520px) {
+  .welcome-view { width: calc(100% - 36px); gap: 38px; padding: 43px 0 48px; }
+  .welcome-copy h1 { margin-top: 19px; font-size: clamp(43px, 12vw, 54px); }
+  .welcome-copy > p { font-size: 12.5px; }
+  .welcome-search { height: 52px; margin-top: 22px; padding-left: 11px; }
+  .welcome-search button { min-width: 82px; height: 40px; padding: 0 10px; }
+  .welcome-footnote { margin-top: 13px; font-size: 9.5px; }
+  .welcome-art { padding: 16px 12px 20px 3px; }
+  .welcome-art::before { inset: -8px -2px 0 24px; }
+  .art-window { transform: none; }
+  .welcome-art:hover .art-window { transform: translateY(-2px); }
+  .art-line { height: 37px; }
+  .art-window-bar { height: 38px; }
+  .art-stamp { right: -5px; bottom: 0; width: 72px; height: 72px; }
+  .art-stamp span { font-size: 6.5px; }
+}
