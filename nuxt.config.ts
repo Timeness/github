@@ -2,7 +2,7 @@ export default defineNuxtConfig({
   compatibilityDate: '2026-10-13',
   devtools: { enabled: false },
   modules: ['@nuxt/ui'],
-  css: ['~/assets/css/main.css'],
+  css: ['~/assets/css/main.scss'],
   typescript: {
     strict: true,
     typeCheck: true
