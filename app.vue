@@ -1542,7 +1542,7 @@ onMounted(() => {
 
 <template>
   <main v-if="mobileDevice" class="pc-only-screen">
-    <section class="pc-only-card" aria-labelledby="pc-only-title">
+    <section class="" aria-labelledby="pc-only-title">
       <span class="pc-only-icon" aria-hidden="true">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640">
           <path d="M0 0h640v640H0z" fill="none" />
@@ -1550,8 +1550,7 @@ onMounted(() => {
         </svg>
       </span>
       <span class="pc-only-eyebrow">GITVIEW EXPLORER</span>
-      <h1 id="pc-only-title">Only available on PC</h1>
-      <p>GitView is currently designed for desktop. Please open this page on a computer for the best experience.</p>
+      <p>GitView is currently designed for desktop only. Please open this page on a PC for the best experience.</p>
     </section>
   </main>
   <div v-else class="app-shell">
