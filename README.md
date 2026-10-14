@@ -1,5 +1,5 @@
 <h1>
-  <img src="./assets/gitview-icon.svg" width="32" height="32" alt="GitView icon" />
+  <img src="./public/gitview.svg" width="32" height="32" alt="GitView" />
   GitView
 </h1>
 
