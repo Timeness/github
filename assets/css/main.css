@@ -31,6 +31,13 @@ button, input { font: inherit; }
 button { color: inherit; }
 a { color: inherit; }
 .app-shell { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+.pc-only-screen { width: 100%; min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 24px; background: radial-gradient(ellipse at 50% 35%, #fff 0%, #f5f7fa 72%); }
+.pc-only-card { width: min(100%, 440px); display: flex; flex-direction: column; align-items: center; padding: 40px 30px; border: 1px solid var(--line); border-radius: 14px; background: rgba(255, 255, 255, .88); box-shadow: 0 16px 48px rgba(16, 34, 61, .08); text-align: center; }
+.pc-only-icon { width: 76px; height: 76px; display: grid; place-items: center; margin-bottom: 25px; border: 1px solid #dce7fb; border-radius: 20px; background: var(--blue-pale); color: var(--blue); }
+.pc-only-icon svg { width: 45px; height: 45px; }
+.pc-only-eyebrow { color: #526782; font-size: 9px; font-weight: 800; letter-spacing: .14em; }
+.pc-only-card h1 { margin: 12px 0 10px; color: #172438; font-size: clamp(24px, 7vw, 31px); font-weight: 800; line-height: 1.2; }
+.pc-only-card p { max-width: 330px; margin: 0; color: #62738a; font-size: 13px; line-height: 1.75; }
 .topbar { position: sticky; top: 10px; z-index: 10; height: 52px; display: flex; flex: 0 0 auto; align-items: center; gap: 14px; margin: 10px 16px; padding: 0 16px; border: 1px solid rgba(225, 231, 239, .9); border-radius: 13px; background: rgba(255, 255, 255, .92); box-shadow: 0 7px 22px rgba(16, 34, 61, .09); backdrop-filter: blur(14px); }
 .brand { display: inline-flex; align-items: center; gap: 9px; min-width: 150px; color: var(--ink); text-decoration: none; font-size: 15px; font-weight: 800; }
 .brand-mark { width: 29px; height: 29px; display: grid; place-items: center; color: white; background: linear-gradient(135deg, var(--blue), #805ce8); border-radius: 7px; }
