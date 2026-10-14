@@ -53,7 +53,7 @@ import {
   Check, ChevronDown, ChevronRight, CircleAlert, Clock3, Code2, Copy, Eye,
   ExternalLink, FileImage, FileText, Folder,
   FolderOpen, GitFork, HardDrive, LoaderCircle, LogOut, RefreshCw, Search,
-  ShieldCheck, Star, X
+  ShieldCheck, Star, Trash2, X
 } from '@lucide/vue'
 
 type Repository = {
@@ -188,6 +188,17 @@ const previewError = ref('')
 const previewLoading = ref(false)
 const loadingRepository = ref(false)
 const copyingRepository = ref(false)
+const copyVisibility = ref<'source' | 'public' | 'private'>('source')
+const copyVisibilityOptions = computed(() => [
+  {
+    label: `Same as source (${repository.value?.private ? 'private' : 'public'})`,
+    value: 'source',
+    description: 'Keep the original repository visibility',
+    icon: repository.value?.private ? 'i-lucide-lock-keyhole' : 'i-lucide-git-branch'
+  },
+  { label: 'Public repository', value: 'public', description: 'Anyone can view this copy', icon: 'i-lucide-globe-2' },
+  { label: 'Private repository', value: 'private', description: 'Only you and collaborators can view it', icon: 'i-lucide-lock-keyhole' }
+])
 const selectionMode = ref(false)
 const selectedPaths = ref<string[]>([])
 const deletingFiles = ref(false)
@@ -1026,7 +1037,7 @@ async function copyRepository() {
       body: JSON.stringify({
         name: repository.value.name,
         description: repository.value.description,
-        private: repository.value.private,
+        private: copyVisibility.value === 'source' ? repository.value.private : copyVisibility.value === 'private',
         auto_init: true,
         default_branch: repository.value.default_branch
       })
@@ -1191,6 +1202,33 @@ function selectedRepositoryFiles() {
   return [...files]
 }
 
+function removeFilesFromLoadedTree(paths: string[]) {
+  const deletedPaths = new Set(paths)
+  const remainingFilePaths = tree.value
+    .filter(entry => entry.type === 'blob' && !deletedPaths.has(entry.path))
+    .map(entry => entry.path)
+
+  tree.value = tree.value.filter(entry => {
+    if (entry.type === 'blob') return !deletedPaths.has(entry.path)
+    return remainingFilePaths.some(path => path.startsWith(`${entry.path}/`))
+  })
+
+  selectedPaths.value = []
+  selectionMode.value = false
+  if (activeFile.value && deletedPaths.has(activeFile.value.path)) {
+    activeFile.value = null
+    previewText.value = ''
+    previewHtml.value = ''
+    previewImage.value = ''
+    websiteDocument.value = ''
+  }
+
+  if (currentPath.value && !remainingFilePaths.some(path => path.startsWith(`${currentPath.value}/`))) {
+    const parentPath = currentPath.value.split('/').slice(0, -1).join('/')
+    openFolder(parentPath)
+  }
+}
+
 async function deleteSelectedPaths() {
   const repo = repository.value
   if (!repo || !selectedPaths.value.length) return
@@ -1272,10 +1310,7 @@ async function permanentlyDeleteSelectedFiles() {
       method: 'PATCH',
       body: JSON.stringify({ sha: commit.sha })
     })
-    selectionMode.value = false
-    selectedPaths.value = []
-    activeFile.value = null
-    await loadRepository(repo.html_url)
+    removeFilesFromLoadedTree(files)
     notify(`${files.length} file${files.length === 1 ? '' : 's'} deleted from ${repo.default_branch}.`, 'success')
   } catch (error) {
     notify(errorMessage(error), 'error')
@@ -1623,11 +1658,33 @@ onMounted(() => { void restoreSavedSession() })
               <span><HardDrive :size="14" /> {{ tree.filter(entry => entry.type === 'blob').length }} files</span>
             </div>
             <div class="overview-actions">
-              <button class="copy-repo-button" type="button" :disabled="copyingRepository || forkingRepository" @click="copyRepository">
-                <LoaderCircle v-if="copyingRepository" class="spin" :size="17" />
-                <HardDrive v-else :size="17" />
-                {{ copyingRepository ? 'Copying repository…' : 'Create an independent copy' }}
-              </button>
+              <div class="copy-controls">
+                <button class="copy-repo-button" type="button" :disabled="copyingRepository || forkingRepository" @click="copyRepository">
+                  <LoaderCircle v-if="copyingRepository" class="spin" :size="17" />
+                  <HardDrive v-else :size="17" />
+                  {{ copyingRepository ? 'Copying repository…' : 'Create an independent copy' }}
+                </button>
+                <div class="copy-visibility">
+                  <span>Copy as</span>
+                  <USelect
+                    v-model="copyVisibility"
+                    :items="copyVisibilityOptions"
+                    value-key="value"
+                    label-key="label"
+                    size="sm"
+                    color="neutral"
+                    variant="outline"
+                    aria-label="Visibility for the independent repository copy"
+                    :disabled="copyingRepository || forkingRepository"
+                    :ui="{ base: 'copy-visibility-trigger', content: 'copy-visibility-popover', item: 'copy-visibility-option', itemLeadingIcon: 'copy-visibility-option-icon' }"
+                  >
+                    <template #item-label="{ item }">
+                      <span class="copy-visibility-option-label"><strong>{{ item.label }}</strong><small>{{ item.description }}</small></span>
+                    </template>
+                  </USelect>
+                </div>
+                <small v-if="copyVisibility === 'private' || (copyVisibility === 'source' && repository.private)" class="copy-visibility-hint">Private copies need the <code>repo</code> token scope.</small>
+              </div>
               <button class="fork-repo-button" type="button" :disabled="copyingRepository || forkingRepository" @click="forkRepository">
                 <LoaderCircle v-if="forkingRepository" class="spin" :size="16" />
                 <GitFork v-else :size="16" />
@@ -1635,7 +1692,7 @@ onMounted(() => { void restoreSavedSession() })
               </button>
               <button v-if="user && user.login.toLowerCase() === repository.owner.login.toLowerCase()" class="delete-repo-button" type="button" :disabled="deletingRepository" @click="deleteRepository">
                 <LoaderCircle v-if="deletingRepository" class="spin" :size="15" />
-                <X v-else :size="15" />
+                <Trash2 v-else :size="15" />
                 {{ deletingRepository ? 'Deleting repository…' : 'Delete repository' }}
               </button>
               <a class="secondary-action" :href="repository.html_url" target="_blank" rel="noreferrer">View on GitHub <ExternalLink :size="14" /></a>
@@ -1766,11 +1823,28 @@ onMounted(() => { void restoreSavedSession() })
       <section class="auth-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-heading">
         <div class="dialog-heading"><div class="dialog-mark"><GitHubMark :size="20" /></div><button class="icon-button" type="button" aria-label="Close" @click="showAuth = false"><X :size="18" /></button></div>
         <h2 id="auth-heading">Connect your GitHub</h2>
-        <p class="dialog-copy">Use a personal access token to create repositories, browse private repositories, and manage files. The token is encrypted in this browser and restored until you sign out.</p>
+        <p class="dialog-copy">A token lets GitView do things on GitHub as you. Public repositories can be explored without signing in; connect only when you need private repo access or GitHub actions.</p>
+        <div class="scope-guide" aria-label="GitHub token scope guide">
+          <div class="scope-guide-heading"><span class="scope-guide-icon"><ShieldCheck :size="15" /></span><div><strong>Choose the smallest access you need</strong><span>For a classic personal access token</span></div></div>
+          <div class="scope-option recommended">
+            <div class="scope-option-top"><code>repo</code><span class="scope-badge">FULL WORKSPACE</span></div>
+            <p><strong>Recommended for private repositories.</strong> Lets GitView read and update repo files, create copies and forks, configure dependency updates, and manage pull requests. Also allows creating private repositories.</p>
+            <small>This is broad access to repositories your GitHub account can access.</small>
+          </div>
+          <div class="scope-option">
+            <div class="scope-option-top"><code>public_repo</code><span class="scope-badge lighter">PUBLIC ONLY</span></div>
+            <p>Use this instead if you only want GitView actions on public repositories, including creating public copies. It does not grant private repository access.</p>
+          </div>
+          <div class="scope-option optional">
+            <div class="scope-option-top"><code>delete_repo</code><span class="scope-badge optional-badge">OPTIONAL</span></div>
+            <p>Only add this if you want to use <strong>Delete repository</strong>. It permits permanent repository deletion, which cannot be undone.</p>
+          </div>
+          <p class="scope-note"><strong>Quick pick:</strong> choose <code>repo</code> for private repos, or <code>public_repo</code> for public repos only. Add <code>delete_repo</code> only if needed. No other scopes are required for GitView.</p>
+        </div>
         <form class="auth-form" @submit.prevent="signIn">
           <label for="github-token">Personal access token</label>
           <input id="github-token" v-model="tokenInput" type="password" autocomplete="off" placeholder="gh_....">
-          <span class="input-hint">Grant repository read/write access and repository creation permission. <a href="https://github.com/settings/tokens/new" target="_blank" rel="noreferrer">Create one <ExternalLink :size="12" /></a></span>
+          <span class="input-hint">Create a classic token, select the scope(s) above, then paste it here. <a href="https://github.com/settings/tokens/new" target="_blank" rel="noreferrer">Create token on GitHub <ExternalLink :size="12" /></a></span>
           <button class="copy-repo-button auth-submit" type="submit"><ShieldCheck :size="16" /> Connect securely</button>
         </form>
         <div class="security-note"><ShieldCheck :size="15" /><span>The encrypted token is stored in local storage and its non-exportable key in IndexedDB. Sign out removes both. This protects against casual storage inspection, not malicious scripts running in this browser.</span></div>
