@@ -1571,7 +1571,7 @@ onMounted(() => {
         </svg>
       </span>
       <span class="pc-only-eyebrow">GITVIEW EXPLORER</span>
-      <p style="font-weight: 700;">GitView is currently designed for desktop only. Please open this page on a PC for the best experience.</p>
+      <p style="font-weight: 700;">GitView is currently designed for desktop only. Please open this page on a desktop for the best experience.</p>
     </section>
   </main>
   <div v-else class="app-shell">
