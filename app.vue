@@ -1670,7 +1670,7 @@ onMounted(() => {
           </div>
           <div class="welcome-art" aria-hidden="true">
             <div class="art-window">
-              <div class="art-window-bar"><i /><i /><i /><span>repository tree</span><Code2 :size="15" /></div>
+              <div class="art-window-bar"><i /><i /><i /><span>REPOSITORY TREE</span><Code2 :size="15" /></div>
               <div class="art-line"><Folder :size="15" /><b>src</b><span>folder</span></div>
               <div class="art-line nested"><Code2 :size="15" /><b>app.vue</b><span>8.4 KB</span></div>
               <div class="art-line nested"><Code2 :size="15" /><b>composables</b><span>folder</span></div>
