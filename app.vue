@@ -1202,6 +1202,33 @@ function selectedRepositoryFiles() {
   return [...files]
 }
 
+function removeFilesFromLoadedTree(paths: string[]) {
+  const deletedPaths = new Set(paths)
+  const remainingFilePaths = tree.value
+    .filter(entry => entry.type === 'blob' && !deletedPaths.has(entry.path))
+    .map(entry => entry.path)
+
+  tree.value = tree.value.filter(entry => {
+    if (entry.type === 'blob') return !deletedPaths.has(entry.path)
+    return remainingFilePaths.some(path => path.startsWith(`${entry.path}/`))
+  })
+
+  selectedPaths.value = []
+  selectionMode.value = false
+  if (activeFile.value && deletedPaths.has(activeFile.value.path)) {
+    activeFile.value = null
+    previewText.value = ''
+    previewHtml.value = ''
+    previewImage.value = ''
+    websiteDocument.value = ''
+  }
+
+  if (currentPath.value && !remainingFilePaths.some(path => path.startsWith(`${currentPath.value}/`))) {
+    const parentPath = currentPath.value.split('/').slice(0, -1).join('/')
+    openFolder(parentPath)
+  }
+}
+
 async function deleteSelectedPaths() {
   const repo = repository.value
   if (!repo || !selectedPaths.value.length) return
@@ -1283,10 +1310,7 @@ async function permanentlyDeleteSelectedFiles() {
       method: 'PATCH',
       body: JSON.stringify({ sha: commit.sha })
     })
-    selectionMode.value = false
-    selectedPaths.value = []
-    activeFile.value = null
-    await loadRepository(repo.html_url)
+    removeFilesFromLoadedTree(files)
     notify(`${files.length} file${files.length === 1 ? '' : 's'} deleted from ${repo.default_branch}.`, 'success')
   } catch (error) {
     notify(errorMessage(error), 'error')
