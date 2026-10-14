@@ -1770,7 +1770,7 @@ onMounted(() => { void restoreSavedSession() })
         <form class="auth-form" @submit.prevent="signIn">
           <label for="github-token">Personal access token</label>
           <input id="github-token" v-model="tokenInput" type="password" autocomplete="off" placeholder="gh_....">
-          <span class="input-hint">Grant repository read/write access and repository creation permission. <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">Create one <ExternalLink :size="12" /></a></span>
+          <span class="input-hint">Grant repository read/write access and repository creation permission. <a href="https://github.com/settings/tokens/new" target="_blank" rel="noreferrer">Create one <ExternalLink :size="12" /></a></span>
           <button class="copy-repo-button auth-submit" type="submit"><ShieldCheck :size="16" /> Connect securely</button>
         </form>
         <div class="security-note"><ShieldCheck :size="15" /><span>The encrypted token is stored in local storage and its non-exportable key in IndexedDB. Sign out removes both. This protects against casual storage inspection, not malicious scripts running in this browser.</span></div>
